@@ -1,0 +1,104 @@
+# Astro Embed Page Reference
+
+This file needs to be manually created in the Astro project at `rohitgarrg.com/src/pages/projects/office-survivors.astro`. Phase 6 of the build process generates a reference copy as `astro-embed-page.txt` in the game project root.
+
+## Astro Project Structure (relevant paths)
+
+```
+rohitgarrg.com/
+  src/
+    layouts/BaseLayout.astro
+    pages/projects/office-survivors.astro   # <-- create this
+  public/
+    projects/office-survivors/              # <-- game build output goes here
+```
+
+## Embed Page Template
+
+```astro
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="Office Survivors | Rohit Garg" description="A satirical pixel-art browser game about surviving corporate life. Built with AI.">
+  <article class="project-page">
+    <h1>Office Survivors</h1>
+    <p class="subtitle">Survive a 10-minute corporate workday. Deliver tasks. Dodge chaos. Climb the ladder.</p>
+
+    <div class="game-wrapper" id="game-wrapper">
+      <div class="click-overlay" id="click-overlay">
+        <span>Click to Play</span>
+        <small>Desktop only. Use WASD to move, Shift to sprint.</small>
+      </div>
+      <iframe
+        id="game-frame"
+        src="/projects/office-survivors/index.html"
+        width="960"
+        height="540"
+        style="border: none; display: block;"
+        allow="autoplay"
+        tabindex="0"
+      ></iframe>
+    </div>
+
+    <div class="project-details">
+      <h2>About</h2>
+      <p>Office Survivors is a top-down arcade delivery game set in a corporate office. You start as an intern, pick up tasks, deliver them to the right departments, avoid office chaos agents (the Micromanager, the Reply-All Guy, the Meeting Scheduler...), and try to survive long enough to become CEO.</p>
+      <p>A complete session lasts about 10 minutes. The career ladder has 5 tiers, each with different task types and increasing chaos. Reaching CEO requires skill, strategy, and a bit of luck.</p>
+
+      <h2>Built With</h2>
+      <p>Phaser 3 (game engine), Claude Code (development), PixelLab (sprite generation).</p>
+      <p class="credit">Built with AI as a portfolio experiment.</p>
+    </div>
+  </article>
+
+  <style>
+    .project-page { max-width: 1040px; margin: 0 auto; padding: 2rem 1rem; }
+    .subtitle { font-size: 1.1rem; opacity: 0.7; margin-bottom: 2rem; }
+    .game-wrapper {
+      position: relative; width: 960px; height: 540px;
+      margin: 2rem auto; background: #1a1a2e;
+      border-radius: 8px; overflow: hidden;
+    }
+    .click-overlay {
+      position: absolute; inset: 0; z-index: 10;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background: rgba(0, 0, 0, 0.75); cursor: pointer; color: white; gap: 0.5rem;
+    }
+    .click-overlay span { font-size: 28px; font-weight: bold; }
+    .click-overlay small { font-size: 14px; opacity: 0.7; }
+    .click-overlay.hidden { display: none; }
+    .project-details { max-width: 720px; margin: 2rem auto; }
+    .credit { margin-top: 2rem; font-style: italic; opacity: 0.7; }
+    @media (max-width: 1000px) {
+      .game-wrapper { width: 100%; height: auto; aspect-ratio: 16/9; }
+      .game-wrapper iframe { width: 100%; height: 100%; }
+    }
+  </style>
+
+  <script>
+    const overlay = document.getElementById('click-overlay');
+    const iframe = document.getElementById('game-frame');
+    overlay.addEventListener('click', () => {
+      overlay.classList.add('hidden');
+      iframe.focus();
+    });
+    window.addEventListener('blur', () => {
+      setTimeout(() => {
+        if (document.activeElement !== iframe) {
+          overlay.classList.remove('hidden');
+        }
+      }, 100);
+    });
+  </script>
+</BaseLayout>
+```
+
+## Deploy Verification Checklist
+
+1. `npm run build` in game project -- no errors
+2. `./deploy.sh /path/to/rohitgarrg.com` -- copies cleanly
+3. `npx astro build` in Astro project -- no errors
+4. Check `dist/projects/office-survivors/index.html` exists in Astro build output
+5. `git push` and verify on live site
+6. On live site: game loads in iframe, "Click to Play" works, WASD works after click, overlay re-shows on blur

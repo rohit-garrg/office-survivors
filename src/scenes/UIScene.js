@@ -1,0 +1,253 @@
+import Phaser from 'phaser';
+import CONFIG from '../config/gameConfig.js';
+import { HUD } from '../ui/HUD.js';
+import { FloatingText } from '../ui/FloatingText.js';
+import { DEPARTMENT_COLORS } from '../config/mapData.js';
+
+/** Descriptions shown on first spawn of each agent type */
+const AGENT_INTRO_DESCRIPTIONS = {
+  micromanager: 'Follows you. Slows you within range.',
+  reply_all_guy: 'Goes to desks. Floods the floor with tasks.',
+  meeting_scheduler: 'Blocks departments with meetings.',
+  chatty_colleague: 'Wanders around. Freezes you on contact.',
+  slack_pinger: 'Spawns fake tasks that waste your time.',
+};
+
+export class UIScene extends Phaser.Scene {
+  constructor() {
+    super({ key: 'UIScene' });
+    console.log('[UIScene] initialized');
+
+    /** @type {Set<string>} Agent types that have already been introduced */
+    this._introducedAgents = new Set();
+  }
+
+  /** Set up HUD elements and register event listeners */
+  create() {
+    console.log('[UIScene] create');
+
+    // Reset per-game state (constructor only runs once per scene lifetime)
+    this._introducedAgents = new Set();
+
+    this.hud = new HUD(this);
+    this.hud.create();
+
+    this.floatingText = new FloatingText(this);
+
+    // Create a FloatingText on GameScene for world-space text (scrolls with camera)
+    const gameScene = this.scene.get('GameScene');
+    this.gameFloatingText = new FloatingText(gameScene);
+
+    this.registerEventListeners();
+
+    // Register shutdown lifecycle
+    this.events.once('shutdown', this.shutdown, this);
+  }
+
+  /** Listen for events from GameScene and update HUD accordingly */
+  registerEventListeners() {
+    const gameScene = this.scene.get('GameScene');
+    if (!gameScene) {
+      console.warn('[UIScene] GameScene not found');
+      return;
+    }
+
+    // Store callback references for proper cleanup in shutdown()
+    this._onStressChanged = (data) => {
+      this.hud.updateStress(data.percent);
+    };
+
+    this._onXPGained = (data) => {
+      this.hud.updateXP(data.current, data.needed);
+    };
+
+    this._onLevelUp = (data) => {
+      this.hud.updateLevel(data.level, data.tier);
+    };
+
+    this._onGameTimerTick = (data) => {
+      this.hud.updateTimer(data.remaining);
+    };
+
+    this._onTaskPickedUp = (data) => {
+      const task = data.task;
+      const player = data.player;
+      const deptColor = DEPARTMENT_COLORS[task.getCurrentDepartment()] || '#ffffff';
+      this.gameFloatingText.show(task.taskName, player.x, player.y, deptColor);
+    };
+
+    this._onTaskDelivered = (data) => {
+      const player = gameScene.player;
+      if (player) {
+        this.gameFloatingText.show(`+${data.xp} XP`, player.x, player.y, '#44ff44');
+      }
+    };
+
+    this._onTaskPartialDelivery = (data) => {
+      const player = gameScene.player;
+      if (player) {
+        this.gameFloatingText.show(
+          `Stop ${data.currentStop}/${data.totalStops}`,
+          player.x, player.y, '#ffaa00'
+        );
+      }
+    };
+
+    this._onUpgradeActivated = (data) => {
+      const player = gameScene.player;
+      if (player) {
+        this.gameFloatingText.show(data.upgrade.name, player.x, player.y, '#FFD700');
+      }
+    };
+
+    this._onUpgradeExpired = (data) => {
+      if (data.upgrade) {
+        const player = gameScene.player;
+        if (player) {
+          this.gameFloatingText.show(`${data.upgrade.name} expired`, player.x, player.y, '#ff4444');
+        }
+      }
+    };
+
+    this._onUpgradeCapacityChanged = (data) => {
+      this.hud.addTaskSlots(data.capacity);
+    };
+
+    this._onMilestoneBonus = (data) => {
+      const player = gameScene.player;
+      if (player) {
+        this.gameFloatingText.show(
+          `CEO Perk: -0.3%/s Stress`,
+          player.x, player.y, '#FFD700'
+        );
+      }
+    };
+
+    this._onAgentSpawned = (data) => {
+      const player = gameScene.player;
+      if (player) {
+        this.gameFloatingText.show(
+          `${data.name} appeared!`,
+          player.x, player.y, '#ff4444'
+        );
+
+        // First-spawn intro: show yellow description line below the title
+        const agentType = data.type;
+        if (agentType && !this._introducedAgents.has(agentType) && AGENT_INTRO_DESCRIPTIONS[agentType]) {
+          this._introducedAgents.add(agentType);
+          this.scene.get('GameScene').time.delayedCall(300, () => {
+            if (player) {
+              this.gameFloatingText.show(
+                AGENT_INTRO_DESCRIPTIONS[agentType],
+                player.x, player.y + 20, '#ffdd00'
+              );
+            }
+          });
+        }
+      }
+    };
+
+    this._onAgentDisruption = (data) => {
+      const player = gameScene.player;
+      if (!player) return;
+
+      let text = '';
+      let color = '#ff4444';
+      switch (data.effect) {
+        case 'slow':
+          text = 'MICROMANAGED!';
+          break;
+        case 'freeze':
+          text = 'TRAPPED IN CHAT!';
+          color = '#ff69b4';
+          break;
+        case 'task_burst':
+          text = 'REPLY-ALL EXPLOSION!';
+          color = '#ffff00';
+          break;
+        case 'department_blocked':
+          text = 'MEETING CALLED!';
+          color = '#888888';
+          break;
+        case 'decoy_spawned':
+          text = '*ping*';
+          color = '#ff8c00';
+          break;
+        case 'decoy_picked_up':
+          text = 'FAKE TASK! +2% Stress';
+          color = '#ff8c00';
+          break;
+        default:
+          return;
+      }
+      this.gameFloatingText.show(text, player.x, player.y, color);
+    };
+
+    this._onDeptBlocked = (data) => {
+      this.hud.showDeptBlocked(data.department);
+    };
+
+    this._onDeptUnblocked = (data) => {
+      this.hud.hideDeptBlocked(data.department);
+    };
+
+    // Register all listeners
+    gameScene.events.on('stress-changed', this._onStressChanged);
+    gameScene.events.on('xp-gained', this._onXPGained);
+    gameScene.events.on('level-up', this._onLevelUp);
+    gameScene.events.on('game-timer-tick', this._onGameTimerTick);
+    gameScene.events.on('task-picked-up', this._onTaskPickedUp);
+    gameScene.events.on('task-delivered', this._onTaskDelivered);
+    gameScene.events.on('task-partial-delivery', this._onTaskPartialDelivery);
+    gameScene.events.on('upgrade-activated', this._onUpgradeActivated);
+    gameScene.events.on('upgrade-expired', this._onUpgradeExpired);
+    gameScene.events.on('upgrade-capacity-changed', this._onUpgradeCapacityChanged);
+    gameScene.events.on('milestone-bonus', this._onMilestoneBonus);
+    gameScene.events.on('agent-spawned', this._onAgentSpawned);
+    gameScene.events.on('agent-disruption', this._onAgentDisruption);
+    gameScene.events.on('department-blocked', this._onDeptBlocked);
+    gameScene.events.on('department-unblocked', this._onDeptUnblocked);
+  }
+
+  /** Update HUD elements each frame (stamina, task indicators, upgrades) */
+  update(time, delta) {
+    const gameScene = this.scene.get('GameScene');
+    if (!gameScene || !gameScene.player) return;
+
+    const player = gameScene.player;
+
+    // Update stamina bar every frame
+    this.hud.updateStamina(player.stamina, CONFIG.PLAYER_STAMINA_MAX);
+
+    // Update task indicators every frame
+    this.hud.updateTasks(player.inventory);
+
+    // Update active upgrade indicators
+    if (gameScene.upgradeManager) {
+      const activeUpgrades = gameScene.upgradeManager.getActiveUpgradesList();
+      this.hud.updateUpgrades(activeUpgrades);
+    }
+  }
+
+  /** Clean up event listeners (removes only UIScene's callbacks, not other systems') */
+  shutdown() {
+    const gameScene = this.scene.get('GameScene');
+    if (gameScene) {
+      gameScene.events.off('stress-changed', this._onStressChanged);
+      gameScene.events.off('xp-gained', this._onXPGained);
+      gameScene.events.off('level-up', this._onLevelUp);
+      gameScene.events.off('game-timer-tick', this._onGameTimerTick);
+      gameScene.events.off('task-picked-up', this._onTaskPickedUp);
+      gameScene.events.off('task-delivered', this._onTaskDelivered);
+      gameScene.events.off('task-partial-delivery', this._onTaskPartialDelivery);
+      gameScene.events.off('upgrade-activated', this._onUpgradeActivated);
+      gameScene.events.off('upgrade-expired', this._onUpgradeExpired);
+      gameScene.events.off('upgrade-capacity-changed', this._onUpgradeCapacityChanged);
+      gameScene.events.off('milestone-bonus', this._onMilestoneBonus);
+      gameScene.events.off('agent-spawned', this._onAgentSpawned);
+      gameScene.events.off('agent-disruption', this._onAgentDisruption);
+      gameScene.events.off('department-blocked', this._onDeptBlocked);
+      gameScene.events.off('department-unblocked', this._onDeptUnblocked);
+    }
+  }
+}
