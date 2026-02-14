@@ -13,7 +13,7 @@ Reference game for core mechanic: https://the-librarian-game.vercel.app/
 - **Build:** Vite 5.x
 - **Physics:** Phaser Arcade Physics only (no Matter.js)
 - **Canvas:** 960x540px, 32x32 tile size, 40x24 tile map
-- **Hosting:** Static files served via Astro site on Vercel
+- **Hosting:** Astro site on Vercel (primary) + standalone at office-survivors.vercel.app
 
 ## Project Structure
 
@@ -86,7 +86,8 @@ Debug flags live in `gameConfig.js` under `DEBUG` (god mode, stress freeze, fast
 
 The game deploys INTO the Astro website's `public/projects/office-survivors/` directory. The Astro page iframes the game's `index.html`.
 
-- **Deploy:** Run `./deploy.sh /path/to/rohitgarrg.com` (builds game + copies output)
+- **Deploy to Astro:** Run `./deploy.sh /path/to/rohitgarrg.com` (builds game + copies output)
+- **Standalone:** `npm run build:standalone` (base `/`). Vercel auto-deploys from GitHub via `vercel.json`.
 - **Embed page:** See `astro-embed-reference.md` for the full Astro page template
 - **Base path:** Must be `/projects/office-survivors/` in vite.config.js (Critical Architecture Rule #6)
 

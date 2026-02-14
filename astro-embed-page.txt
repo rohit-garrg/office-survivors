@@ -3,7 +3,7 @@
 import BaseLayout from '../../layouts/BaseLayout.astro';
 ---
 
-<BaseLayout title="Office Survivors | Rohit Garg" description="A satirical pixel-art browser game about surviving corporate life. Built with AI.">
+<BaseLayout title="Office Survivors | Rohit Garg" description="A satirical pixel-art browser game about surviving corporate life. Built with AI." ogImage="/projects/office-survivors/og-image.png">
   <article class="project-page">
     <h1>Office Survivors</h1>
     <p class="subtitle">Survive a 10-minute corporate workday. Deliver tasks. Dodge chaos. Climb the ladder.</p>

@@ -51,7 +51,7 @@ YOUR MACHINE
 ├── rohitgarrg.com/              # Astro website (existing repo)
 │   ├── src/
 │   ├── public/
-│   │   └── games/
+│   │   └── projects/
 │   │       └── office-survivors/ # <-- Game's BUILT output goes here
 │   │           ├── index.html
 │   │           ├── assets/
@@ -83,7 +83,7 @@ YOUR MACHINE
 # Usage: ./deploy.sh /path/to/rohitgarrg.com
 
 SITE_DIR="${1:?Usage: ./deploy.sh /path/to/rohitgarrg.com}"
-GAME_DIR="$SITE_DIR/public/games/office-survivors"
+GAME_DIR="$SITE_DIR/public/projects/office-survivors"
 
 echo "Building game..."
 npm run build
@@ -151,7 +151,7 @@ const config = {
       debug: false // toggle true during dev
     }
   },
-  scene: [BootScene, TitleScene, GameScene, UIScene, LevelUpScene, GameOverScene]
+  scene: [BootScene, TitleScene, HowToPlayScene, GameScene, UIScene, LevelUpScene, GameOverScene]
 };
 ```
 
@@ -761,6 +761,7 @@ office-survivors/
 │   ├── scenes/
 │   │   ├── BootScene.js          # Preload assets, loading bar
 │   │   ├── TitleScene.js         # Title screen, menu
+│   │   ├── HowToPlayScene.js     # Controls/tutorial overlay
 │   │   ├── GameScene.js          # Core gameplay loop
 │   │   ├── UIScene.js            # HUD (runs parallel to GameScene)
 │   │   ├── LevelUpScene.js       # Promotion popup + upgrade cards (overlay)
@@ -782,7 +783,9 @@ office-survivors/
 │   │   ├── StressManager.js      # Per-frame stress calc, visual feedback triggers
 │   │   ├── UpgradeManager.js     # Pool filtering, active effects, duration tracking
 │   │   ├── WaveManager.js        # Agent spawn schedule (time + level gates)
-│   │   └── ProgressionManager.js # XP, levels, tier transitions, promotion events
+│   │   ├── ProgressionManager.js # XP, levels, tier transitions, promotion events
+│   │   ├── ParticleManager.js    # Particle effects (pickup, delivery, level-up, expiry)
+│   │   └── SoundManager.js       # Procedural audio, BGM, SFX, mute toggle
 │   │
 │   ├── config/
 │   │   ├── gameConfig.js         # All tunable numbers (single source of truth)
@@ -798,12 +801,16 @@ office-survivors/
 │   │   └── FloatingText.js       # Task name popup on pickup
 │   │
 │   └── utils/
-│       └── helpers.js            # Color utils, math helpers, random selection
+│       ├── helpers.js            # Color utils, math helpers, random selection
+│       └── analytics.js          # GA4 event tracking
 │
 ├── public/
 │   ├── assets/
 │   │   ├── sprites/              # Character sprite sheets
 │   │   ├── tiles/                # Tileset images
+│   │   ├── furniture/            # Office furniture sprites
+│   │   ├── environment/          # Plants, vending machines, water coolers
+│   │   ├── decor/                # Wall art, clocks, papers, supplies
 │   │   ├── ui/                   # UI sprites
 │   │   └── audio/                # Sound (Phase 4)
 │   │
