@@ -51,11 +51,38 @@ export class SoundManager {
     }
   }
 
-  /** Resume audio context (required after first user gesture for autoplay policy) */
+  /** Resume audio context (required after first user gesture for autoplay policy).
+   *  Returns a Promise that resolves when the context is running. */
   resume() {
-    if (this.ctx && this.ctx.state === 'suspended') {
-      this.ctx.resume();
+    // Create context inside user gesture if it doesn't exist yet (iOS compatibility)
+    if (!this.ctx) {
+      try {
+        this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        this.masterGain = this.ctx.createGain();
+        this.masterGain.gain.value = this.muted ? 0 : CONFIG.SOUND.MASTER_VOLUME;
+        this.masterGain.connect(this.ctx.destination);
+        this.initialized = true;
+        console.log('[SoundManager] Web Audio context created inside user gesture');
+      } catch (e) {
+        console.warn('[SoundManager] Web Audio not available:', e.message);
+        return Promise.resolve();
+      }
     }
+    if (this.ctx.state === 'suspended') {
+      // iOS Safari requires playing an actual buffer within a user gesture to unlock audio.
+      // Just calling ctx.resume() is not enough on iOS.
+      try {
+        const silentBuffer = this.ctx.createBuffer(1, 1, 22050);
+        const source = this.ctx.createBufferSource();
+        source.buffer = silentBuffer;
+        source.connect(this.ctx.destination);
+        source.start(0);
+      } catch (e) {
+        // Ignore — best-effort unlock
+      }
+      return this.ctx.resume();
+    }
+    return Promise.resolve();
   }
 
   /** Toggle mute on/off */

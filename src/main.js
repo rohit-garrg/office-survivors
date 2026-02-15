@@ -8,12 +8,23 @@ import { LevelUpScene } from './scenes/LevelUpScene.js';
 import { GameOverScene } from './scenes/GameOverScene.js';
 import { HowToPlayScene } from './scenes/HowToPlayScene.js';
 
+// Sync #game-container height with actual visible viewport (excludes mobile URL bar)
+function syncContainerHeight() {
+  const container = document.getElementById('game-container');
+  if (container) {
+    container.style.height = window.innerHeight + 'px';
+  }
+}
+syncContainerHeight();
+window.addEventListener('resize', syncContainerHeight);
+
 const config = {
   type: Phaser.AUTO,
   width: CONFIG.CANVAS_WIDTH,
   height: CONFIG.CANVAS_HEIGHT,
   pixelArt: true,
   backgroundColor: '#1a1a2e',
+  parent: 'game-container',
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,

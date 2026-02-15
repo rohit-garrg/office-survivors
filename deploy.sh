@@ -20,6 +20,10 @@ rm -rf "$GAME_DIR"
 mkdir -p "$GAME_DIR"
 cp -r dist/* "$GAME_DIR/"
 
+# Astro iframe expects game.html (not index.html) to avoid path collision
+# with the Astro route at /projects/office-survivors/
+mv "$GAME_DIR/index.html" "$GAME_DIR/game.html"
+
 # Check if Astro embed page exists
 if [ ! -f "$ASTRO_PAGE" ]; then
   echo ""

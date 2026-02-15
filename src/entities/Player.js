@@ -80,6 +80,15 @@ export class Player extends Phaser.GameObjects.Sprite {
 
     /** @type {Phaser.GameObjects.Sprite|null} Paper stack child overlay */
     this.paperStack = null;
+
+    /** @type {{x: number, y: number}|null} Tap-to-move target position */
+    this.moveTarget = null;
+
+    /** @type {boolean} Whether currently in touch-sprint mode (long-press) */
+    this.touchSprinting = false;
+
+    /** @type {boolean} Whether this player uses touch input */
+    this.useTouchInput = false;
   }
 
   /** Set up physics body, paper stack, and add to scene */
@@ -123,6 +132,7 @@ export class Player extends Phaser.GameObjects.Sprite {
   update(time, delta) {
     if (this.isFrozen) {
       this.body.setVelocity(0, 0);
+      this.moveTarget = null;
       this.updateAnimation(0, 0);
       this.updateShadow();
       this.updatePaperStack();
@@ -130,7 +140,17 @@ export class Player extends Phaser.GameObjects.Sprite {
     }
 
     this.handleSprint(delta);
-    this.handleMovement();
+
+    if (this.useTouchInput && this.moveTarget) {
+      this.handleTouchMovement();
+    } else if (!this.useTouchInput) {
+      this.handleMovement();
+    } else {
+      // Touch mode but no target — stop
+      this.body.setVelocity(0, 0);
+      this.updateAnimation(0, 0);
+    }
+
     this.updateShadow();
     this.updatePaperStack();
   }
@@ -275,10 +295,12 @@ export class Player extends Phaser.GameObjects.Sprite {
 
   /** Handle sprint: drain/regen stamina */
   handleSprint(delta) {
-    const shiftKey = this.scene.shiftKey;
     const deltaSeconds = delta / 1000;
+    const isSprinting = this.useTouchInput
+      ? this.touchSprinting
+      : this.scene.shiftKey.isDown;
 
-    if (shiftKey.isDown && this.stamina > 0 && !CONFIG.DEBUG.INFINITE_STAMINA) {
+    if (isSprinting && this.stamina > 0 && !CONFIG.DEBUG.INFINITE_STAMINA) {
       this.isSprinting = true;
       this.stamina -= CONFIG.PLAYER_STAMINA_DRAIN * deltaSeconds;
       if (this.stamina < 0) this.stamina = 0;
@@ -294,8 +316,91 @@ export class Player extends Phaser.GameObjects.Sprite {
 
     if (CONFIG.DEBUG.INFINITE_STAMINA) {
       this.stamina = CONFIG.PLAYER_STAMINA_MAX;
-      this.isSprinting = shiftKey.isDown;
+      this.isSprinting = isSprinting;
     }
+  }
+
+  /** Set up tap-to-move input listeners (called from GameScene on touch devices) */
+  initTouchInput() {
+    this.useTouchInput = true;
+
+    let sprintTimer = null;
+
+    this.scene.input.on('pointerdown', (pointer) => {
+      // Don't process taps on the pause button area (top-right corner)
+      if (pointer.x > CONFIG.CANVAS_WIDTH - 60 && pointer.y < 60) return;
+
+      this.touchSprinting = false;
+
+      // Convert screen coords to world coords
+      const worldPoint = this.scene.cameras.main.getWorldPoint(pointer.x, pointer.y);
+      this.moveTarget = { x: worldPoint.x, y: worldPoint.y };
+
+      this.showTapMarker(worldPoint.x, worldPoint.y);
+
+      // Start sprint timer (long-press = sprint)
+      if (sprintTimer) sprintTimer.remove();
+      sprintTimer = this.scene.time.delayedCall(CONFIG.MOBILE_SPRINT_HOLD_THRESHOLD, () => {
+        this.touchSprinting = true;
+      });
+    });
+
+    this.scene.input.on('pointermove', (pointer) => {
+      if (!pointer.isDown) return;
+      const worldPoint = this.scene.cameras.main.getWorldPoint(pointer.x, pointer.y);
+      this.moveTarget = { x: worldPoint.x, y: worldPoint.y };
+    });
+
+    this.scene.input.on('pointerup', () => {
+      this.touchSprinting = false;
+      if (sprintTimer) {
+        sprintTimer.remove();
+        sprintTimer = null;
+      }
+    });
+  }
+
+  /** Show a brief tap marker at the destination */
+  showTapMarker(x, y) {
+    const marker = this.scene.add.circle(x, y, 6, 0xffffff, 0.5).setDepth(5);
+    this.scene.tweens.add({
+      targets: marker,
+      alpha: 0,
+      scale: 2,
+      duration: CONFIG.MOBILE_TAP_MARKER_DURATION,
+      onComplete: () => marker.destroy(),
+    });
+  }
+
+  /** Move toward tap target */
+  handleTouchMovement() {
+    const dx = this.moveTarget.x - this.x;
+    const dy = this.moveTarget.y - this.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist < 4) {
+      // Arrived at target
+      this.body.setVelocity(0, 0);
+      this.moveTarget = null;
+      this.updateAnimation(0, 0);
+      return;
+    }
+
+    // Normalize direction
+    const nx = dx / dist;
+    const ny = dy / dist;
+
+    let speed = this.currentSpeed;
+    if (this.isSprinting && this.stamina > 0) {
+      speed *= CONFIG.PLAYER_SPRINT_MULTIPLIER;
+    }
+
+    this.body.setVelocity(nx * speed, ny * speed);
+
+    // Convert to -1/0/1 for animation
+    const vx = nx > 0.3 ? 1 : nx < -0.3 ? -1 : 0;
+    const vy = ny > 0.3 ? 1 : ny < -0.3 ? -1 : 0;
+    this.updateAnimation(vx, vy);
   }
 
   /**

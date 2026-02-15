@@ -110,33 +110,42 @@ export const OBSTACLES = [
  */
 export const ROOM_WALLS = [
   // CEO Office walls (door gap at right wall y=3,4)
-  { x: 0, y: 1, width: 8, height: 1 }, // top
-  { x: 7, y: 1, width: 1, height: 2 }, // right upper
-  { x: 7, y: 5, width: 1, height: 1 }, // right lower (gap at y=3,4)
-  { x: 0, y: 6, width: 8, height: 1 }, // bottom
+  { x: 0, y: 1, width: 8, height: 1, deptId: 'CEO' }, // top
+  { x: 7, y: 1, width: 1, height: 2, deptId: 'CEO' }, // right upper
+  { x: 7, y: 5, width: 1, height: 1, deptId: 'CEO' }, // right lower (gap at y=3,4)
+  { x: 0, y: 6, width: 8, height: 1, deptId: 'CEO' }, // bottom
 
   // Marketing walls (door gap at right wall y=9,10)
-  { x: 0, y: 7, width: 8, height: 1 },
-  { x: 7, y: 7, width: 1, height: 2 }, // right upper
-  { x: 7, y: 11, width: 1, height: 1 }, // right lower (gap at y=9,10)
-  { x: 0, y: 12, width: 8, height: 1 },
+  { x: 0, y: 7, width: 8, height: 1, deptId: 'MARKETING' },
+  { x: 7, y: 7, width: 1, height: 2, deptId: 'MARKETING' }, // right upper
+  { x: 7, y: 11, width: 1, height: 1, deptId: 'MARKETING' }, // right lower (gap at y=9,10)
+  { x: 0, y: 12, width: 8, height: 1, deptId: 'MARKETING' },
 
   // Engineering walls (door gap at right wall y=19,20)
-  { x: 0, y: 17, width: 8, height: 1 },
-  { x: 7, y: 17, width: 1, height: 2 }, // right upper
-  { x: 7, y: 21, width: 1, height: 1 }, // right lower (gap at y=19,20)
-  { x: 0, y: 22, width: 8, height: 1 },
+  { x: 0, y: 17, width: 8, height: 1, deptId: 'ENGINEERING' },
+  { x: 7, y: 17, width: 1, height: 2, deptId: 'ENGINEERING' }, // right upper
+  { x: 7, y: 21, width: 1, height: 1, deptId: 'ENGINEERING' }, // right lower (gap at y=19,20)
+  { x: 0, y: 22, width: 8, height: 1, deptId: 'ENGINEERING' },
 
   // Finance walls (door gap at left wall y=9,10)
-  { x: 32, y: 7, width: 8, height: 1 },
-  { x: 32, y: 7, width: 1, height: 2 }, // left upper
-  { x: 32, y: 11, width: 1, height: 1 }, // left lower (gap at y=9,10)
-  { x: 32, y: 12, width: 8, height: 1 },
+  { x: 32, y: 7, width: 8, height: 1, deptId: 'FINANCE' },
+  { x: 32, y: 7, width: 1, height: 2, deptId: 'FINANCE' }, // left upper
+  { x: 32, y: 11, width: 1, height: 1, deptId: 'FINANCE' }, // left lower (gap at y=9,10)
+  { x: 32, y: 12, width: 8, height: 1, deptId: 'FINANCE' },
 
   // HR walls (door gap at left wall y=19,20) — mirrors Finance below it
-  { x: 32, y: 17, width: 8, height: 1 }, // top
-  { x: 32, y: 17, width: 1, height: 2 }, // left upper
-  { x: 32, y: 21, width: 1, height: 1 }, // left lower (gap at y=19,20)
-  { x: 32, y: 22, width: 8, height: 1 }, // bottom
+  { x: 32, y: 17, width: 8, height: 1, deptId: 'HR' }, // top
+  { x: 32, y: 17, width: 1, height: 2, deptId: 'HR' }, // left upper
+  { x: 32, y: 21, width: 1, height: 1, deptId: 'HR' }, // left lower (gap at y=19,20)
+  { x: 32, y: 22, width: 8, height: 1, deptId: 'HR' }, // bottom
 
 ];
+
+/** Short department abbreviations for HUD badges */
+export const DEPARTMENT_ABBREV = {
+  CEO: 'CEO',
+  MARKETING: 'Mkt',
+  ENGINEERING: 'Eng',
+  FINANCE: 'Fin',
+  HR: 'HR',
+};

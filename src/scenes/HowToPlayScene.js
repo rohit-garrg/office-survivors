@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import CONFIG from '../config/gameConfig.js';
+import { isTouchDevice } from '../utils/helpers.js';
 
 const STORAGE_KEY = 'office-survivors-seen-how-to-play';
 
@@ -86,8 +87,8 @@ export class HowToPlayScene extends Phaser.Scene {
       this.dots.push(dot);
     }
 
-    // Hint text
-    this.add.text(cx, cy + PANEL_H / 2 - 8, 'ESC to close  |  Arrow keys to navigate', {
+    // Hint text (below dots, outside panel)
+    this.add.text(cx, cy + PANEL_H / 2 + 12, 'ESC to close  |  Arrow keys to navigate', {
       fontSize: '10px', fontFamily: 'monospace', color: '#555577',
     }).setOrigin(0.5).setDepth(602);
 
@@ -187,19 +188,26 @@ export class HowToPlayScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     y += 25;
-    const controls = [
-      ['WASD / Arrows', 'Move around the office'],
-      ['SHIFT', 'Sprint (uses stamina)'],
-      ['SPACE', 'Pick up tasks (auto-pickup near tasks)'],
-      ['P / ESC', 'Pause the game'],
-      ['M', 'Toggle sound on/off'],
-    ];
+    const controls = isTouchDevice()
+      ? [
+          ['Tap', 'Move to that spot'],
+          ['Hold', 'Sprint (uses stamina)'],
+          ['Pause icon', 'Pause / Menu'],
+          ['Mute icon', 'Toggle sound'],
+        ]
+      : [
+          ['WASD / Arrows', 'Move around the office'],
+          ['SHIFT', 'Sprint (uses stamina)'],
+          ['SPACE', 'Pick up tasks (auto-pickup near tasks)'],
+          ['P / ESC', 'Pause the game'],
+          ['M', 'Toggle sound on/off'],
+        ];
 
     for (const [key, desc] of controls) {
-      this.addPageText(left + 60, y, key, {
+      this.addPageText(left + 120, y, key, {
         fontSize: '13px', color: '#FFD700', fontStyle: 'bold',
       }).setOrigin(1, 0);
-      this.addPageText(left + 80, y, desc, {
+      this.addPageText(left + 140, y, desc, {
         fontSize: '12px', color: '#ccccdd',
       });
       y += 22;

@@ -298,7 +298,14 @@ export class ChaosAgent extends Phaser.GameObjects.Sprite {
     this.target = null;
     if (this.body) this.body.setVelocity(0, 0);
     this.updateAgentAnimation(0, 0);
-    console.debug(`[ChaosAgent:${this.agentType}] stuck, gave up on target`);
+
+    // Force random wander for 1.5s to escape the wall before re-acquiring a target
+    this._isNudging = true;
+    this._nudgeTimer = 1500;
+    const angle = Math.random() * Math.PI * 2;
+    this._nudgeDir = { x: Math.cos(angle), y: Math.sin(angle) };
+
+    console.debug(`[ChaosAgent:${this.agentType}] stuck, wandering to escape`);
   }
 
   /** Set a new movement target in pixel coordinates */
@@ -310,6 +317,20 @@ export class ChaosAgent extends Phaser.GameObjects.Sprite {
     this._stuckRetries = 0;
     this._lastPos.x = this.x;
     this._lastPos.y = this.y;
+  }
+
+  /**
+   * Update target coordinates without resetting stuck detection.
+   * Use for continuously-tracking agents (e.g., Micromanager following player).
+   * Unlike setTarget(), this preserves stuck timer, retry count, and nudge state.
+   */
+  updateTargetPosition(x, y) {
+    if (!this.target) {
+      this.setTarget(x, y);
+      return;
+    }
+    this.target.x = x;
+    this.target.y = y;
   }
 
   /**

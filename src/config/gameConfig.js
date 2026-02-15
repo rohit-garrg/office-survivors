@@ -56,11 +56,11 @@ export default {
 
   // === CHAOS AGENTS: SHARED ===
   AGENT_ARRIVAL_THRESHOLD: 8, // px — distance to consider "arrived" at target
-  AGENT_STUCK_THRESHOLD: 2, // px — distance moved below which agent is "stuck"
-  AGENT_STUCK_CHECK_INTERVAL: 500, // ms between stuck checks
+  AGENT_STUCK_THRESHOLD: 4, // px — distance moved below which agent is "stuck" (was 2)
+  AGENT_STUCK_CHECK_INTERVAL: 1000, // ms between stuck checks (was 500 — longer window = more meaningful)
   AGENT_STUCK_IDLE_DURATION: 500, // ms to idle when stuck before retrying
   AGENT_STUCK_MAX_RETRIES: 3,       // nudge attempts before calling onStuck()
-  AGENT_STUCK_NUDGE_DURATION: 400,  // ms to move perpendicular when stuck
+  AGENT_STUCK_NUDGE_DURATION: 1200,  // ms to move perpendicular when stuck (was 400 — 3x longer to clear walls)
   AGENT_PERPENDICULAR_SPEED_FACTOR: 0.5, // secondary axis speed when navigating around obstacles
   AGENT_WANDER_DIR_CHANGE_MIN: 2000, // ms min between wander direction changes
   AGENT_WANDER_DIR_CHANGE_MAX: 4000, // ms max between wander direction changes
@@ -168,8 +168,32 @@ export default {
 
   // === HUD ===
   HUD_MAX_TASK_SLOTS: 4, // max task info lines (matches max carry capacity with Extra Hands)
+  HUD_BADGE_WIDTH: 34,   // px — task badge width in top bar
+  HUD_BADGE_HEIGHT: 12,  // px — task badge height in top bar
+  HUD_BADGE_GAP: 3,      // px — gap between task badges
   STAMINA_LOW_THRESHOLD: 0.2, // ratio — stamina bar turns red
   STAMINA_WARN_THRESHOLD: 0.4, // ratio — stamina bar turns yellow
+
+  // === TOASTS ===
+  TOAST_DURATION: 4000,       // ms hold time
+  TOAST_FADE_IN: 300,         // ms
+  TOAST_FADE_OUT: 500,        // ms
+  SPRINT_HINT_STRESS_THRESHOLD: 50,  // % stress to trigger sprint hint
+
+  // === SOUND PROMPT ===
+  SOUND_PROMPT_DELAY: 5000,   // ms after game start before sound prompt
+
+  // === WATER COOLER ===
+  WATER_COOLER_STRESS_RELIEF: 8,     // % stress reduced on use
+  WATER_COOLER_STAMINA_RESTORE: 20,  // stamina points restored on use
+  WATER_COOLER_COOLDOWN: 20000,      // ms before it can be used again
+  WATER_COOLER_TILE_X: 37,           // tile position X (Break Room area)
+  WATER_COOLER_TILE_Y: 4,            // tile position Y (Break Room area)
+
+  // === SHARE ===
+  SHARE_CARD_WIDTH: 1200,
+  SHARE_CARD_HEIGHT: 630,
+  SHARE_URL: 'https://rohitgarrg.com/projects/office-survivors',
 
   // === LEVEL UP ===
   PROMOTION_POPUP_DURATION: 2000, // ms to show "PROMOTED!" text
@@ -184,6 +208,12 @@ export default {
   CAMERA_LERP: 0.08,
   CAMERA_DEADZONE_WIDTH: 200,
   CAMERA_DEADZONE_HEIGHT: 150,
+
+  // === MOBILE ===
+  MOBILE_TAP_MARKER_DURATION: 500,    // ms tap destination marker visible
+  MOBILE_SPRINT_HOLD_THRESHOLD: 200,  // ms before long-press triggers sprint
+  MOBILE_PAUSE_BUTTON_SIZE: 32,       // game px
+  MOBILE_PAUSE_HIT_SIZE: 48,          // game px (larger touch target)
 
   // === TASK TIER SELECTION WEIGHTS ===
   TASK_TIER_WEIGHT_CURRENT: 0.6,

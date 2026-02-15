@@ -1,11 +1,21 @@
 import Phaser from 'phaser';
 import CONFIG from '../config/gameConfig.js';
 import { trackEvent } from '../utils/analytics.js';
+import { isTouchDevice } from '../utils/helpers.js';
+
+/** Upgrade color mapping for icons and highlights */
+const CATEGORY_COLORS = {
+  always_useful: 0x4169E1,
+  anti_agent: 0xff4444,
+  xp_boost: 0x44ff44,
+  delivery: 0xFF8C00,
+  advanced: 0xFFD700,
+};
 
 /**
  * LevelUpScene: overlay scene shown on level up.
  * Shows promotion popup (if tier change), then 3 upgrade cards.
- * Player clicks a card or presses 1/2/3 to select.
+ * Player clicks a card, presses 1/2/3, or uses arrow keys + Enter to select.
  */
 export class LevelUpScene extends Phaser.Scene {
   constructor() {
@@ -107,7 +117,11 @@ export class LevelUpScene extends Phaser.Scene {
     const isMilestone = this.levelData.isMilestone;
     const headerText = isMilestone ? 'Bonus Upgrade!' : `Level ${this.levelData.level}!`;
     const headerColor = isMilestone ? '#FFD700' : '#44ff44';
-    const subtitleText = isMilestone ? 'CEO perk — choose wisely:' : 'Choose an upgrade:';
+    const isMobile = isTouchDevice();
+    const hintText = isMobile ? 'Tap to select' : 'Press 1/2/3 or click';
+    const subtitleText = isMilestone
+      ? `CEO perk — ${hintText}:`
+      : `${hintText}:`;
 
     const header = this.add.text(cx, topY, headerText, {
       fontSize: '24px',
@@ -134,15 +148,6 @@ export class LevelUpScene extends Phaser.Scene {
     const startX = cx - totalWidth / 2 + cardW / 2;
     const cardY = cy + 30;
 
-    // Upgrade color mapping for icons
-    const categoryColors = {
-      always_useful: 0x4169E1,
-      anti_agent: 0xff4444,
-      xp_boost: 0x44ff44,
-      delivery: 0xFF8C00,
-      advanced: 0xFFD700,
-    };
-
     // Category icon shapes (drawn via graphics)
     const categoryIcons = {
       always_useful: 'circle',
@@ -153,11 +158,12 @@ export class LevelUpScene extends Phaser.Scene {
     };
 
     this.cardElements = [];
+    this.selectedIndex = 0;
 
     for (let i = 0; i < upgrades.length; i++) {
       const upgrade = upgrades[i];
       const x = startX + i * (cardW + gap);
-      const iconColor = categoryColors[upgrade.category] || 0x888888;
+      const iconColor = CATEGORY_COLORS[upgrade.category] || 0x888888;
 
       // Card background with gradient-like effect
       const cardBg = this.add.rectangle(x, cardY, cardW, cardH, 0x1a1a2e, 0.95)
@@ -171,14 +177,13 @@ export class LevelUpScene extends Phaser.Scene {
         .setDepth(402);
       this.elements.push(accentBar);
 
-      // Hover effects
+      // Hover effects — sync with keyboard highlight
       cardBg.on('pointerover', () => {
-        cardBg.setStrokeStyle(2, iconColor);
-        accentBar.setAlpha(1);
+        this.selectedIndex = i;
+        this.updateHighlight();
       });
       cardBg.on('pointerout', () => {
-        cardBg.setStrokeStyle(2, 0x333355);
-        accentBar.setAlpha(0.7);
+        this.updateHighlight();
       });
       cardBg.on('pointerdown', () => {
         this.selectUpgrade(i);
@@ -255,10 +260,10 @@ export class LevelUpScene extends Phaser.Scene {
 
       // Duration badge at bottom
       let durationStr = '';
-      if (upgrade.duration === 'permanent') durationStr = '∞ Permanent';
-      else if (upgrade.duration === 'instant') durationStr = '⚡ Instant';
-      else if (typeof upgrade.duration === 'number') durationStr = `⏱ ${upgrade.duration / 1000}s`;
-      if (upgrade.uses) durationStr += ` (${upgrade.uses}×)`;
+      if (upgrade.duration === 'permanent') durationStr = '\u221E Permanent';
+      else if (upgrade.duration === 'instant') durationStr = '\u26A1 Instant';
+      else if (typeof upgrade.duration === 'number') durationStr = `\u23F1 ${upgrade.duration / 1000}s`;
+      if (upgrade.uses) durationStr += ` (${upgrade.uses}\u00D7)`;
 
       if (durationStr) {
         const durBg = this.add.rectangle(x, cardY + cardH / 2 - 22, 100, 20, 0x222244, 0.8)
@@ -284,6 +289,61 @@ export class LevelUpScene extends Phaser.Scene {
       const handler = () => this.selectUpgrade(i);
       key.once('down', handler);
       this._keyHandlers.push(key);
+    }
+
+    // Arrow key / A/D / Enter navigation
+    const leftKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.LEFT);
+    const rightKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.RIGHT);
+    const upKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.UP);
+    const downKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.DOWN);
+    const aKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A);
+    const dKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D);
+    const enterKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
+
+    this._navKeys = [leftKey, rightKey, upKey, downKey, aKey, dKey, enterKey];
+
+    leftKey.on('down', () => this.moveHighlight(-1));
+    rightKey.on('down', () => this.moveHighlight(1));
+    upKey.on('down', () => this.moveHighlight(-1));
+    downKey.on('down', () => this.moveHighlight(1));
+    aKey.on('down', () => this.moveHighlight(-1));
+    dKey.on('down', () => this.moveHighlight(1));
+    enterKey.on('down', () => this.selectUpgrade(this.selectedIndex));
+
+    // Show initial highlight on card 0
+    this.updateHighlight();
+  }
+
+  /**
+   * Move the keyboard highlight between cards.
+   * @param {number} direction - -1 for left, +1 for right
+   */
+  moveHighlight(direction) {
+    if (!this.cardElements || this.cardElements.length === 0) return;
+
+    const count = this.cardElements.length;
+    this.selectedIndex = (this.selectedIndex + direction + count) % count;
+    this.updateHighlight();
+  }
+
+  /** Update visual highlight on all cards based on selectedIndex */
+  updateHighlight() {
+    if (!this.cardElements) return;
+
+    for (let i = 0; i < this.cardElements.length; i++) {
+      const card = this.cardElements[i];
+      const isSelected = (i === this.selectedIndex);
+      const iconColor = CATEGORY_COLORS[card.upgrade.category] || 0x888888;
+
+      if (isSelected) {
+        card.bg.setStrokeStyle(3, 0xffffff);
+        card.bg.setAlpha(1);
+        card.accentBar.setAlpha(1);
+      } else {
+        card.bg.setStrokeStyle(2, 0x333355);
+        card.bg.setAlpha(0.85);
+        card.accentBar.setAlpha(0.7);
+      }
     }
   }
 
@@ -326,6 +386,13 @@ export class LevelUpScene extends Phaser.Scene {
       }
     }
 
+    // Remove nav key listeners
+    if (this._navKeys) {
+      for (const key of this._navKeys) {
+        key.removeAllListeners('down');
+      }
+    }
+
     // Disable all card interactions
     for (const card of this.cardElements) {
       card.bg.disableInteractive();
@@ -350,6 +417,13 @@ export class LevelUpScene extends Phaser.Scene {
 
   /** Clean up and return to GameScene */
   close() {
+    // Clean up nav keys (safety net for no-upgrades path)
+    if (this._navKeys) {
+      for (const key of this._navKeys) {
+        key.removeAllListeners('down');
+      }
+    }
+
     // Destroy all elements
     for (const el of this.elements) {
       if (el && el.destroy) el.destroy();

@@ -124,3 +124,11 @@ export function formatTime(totalSeconds) {
 export function hexToInt(hex) {
   return parseInt(hex.replace('#', ''), 16);
 }
+
+/**
+ * Check if the device supports touch input.
+ * @returns {boolean}
+ */
+export function isTouchDevice() {
+  return 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+}

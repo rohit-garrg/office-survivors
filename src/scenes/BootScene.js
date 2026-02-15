@@ -36,6 +36,12 @@ export class BootScene extends Phaser.Scene {
       loadText.destroy();
     });
 
+    // === Title background (WebP with PNG fallback) ===
+    this.load.image('title-bg', this.getWebPSupport()
+      ? 'assets/ui/title-bg.webp'
+      : 'assets/ui/title-bg.png'
+    );
+
     // === Character sprite sheets ===
     // Player (8-dir): 256x160, 8 cols x 5 rows, 32x32 frames
     this.load.spritesheet('player-casual', 'assets/sprites/player-casual.png', { frameWidth: 32, frameHeight: 32 });
@@ -112,14 +118,12 @@ export class BootScene extends Phaser.Scene {
     playerGfx.generateTexture('player', 32, 32);
     playerGfx.destroy();
 
-    // Department zone textures (semi-transparent colored areas)
+    // Department zone textures (subtle floor tint, no per-tile border)
     for (const dept of DEPARTMENTS) {
       const gfx = this.make.graphics({ add: false });
       const color = parseInt(dept.color.replace('#', ''), 16);
-      gfx.fillStyle(color, 0.3);
+      gfx.fillStyle(color, 0.18);
       gfx.fillRect(0, 0, 32, 32);
-      gfx.lineStyle(2, color, 0.6);
-      gfx.strokeRect(0, 0, 32, 32);
       gfx.generateTexture(`zone_${dept.id}`, 32, 32);
       gfx.destroy();
     }
@@ -140,6 +144,26 @@ export class BootScene extends Phaser.Scene {
     wallGfx.strokeRect(0, 0, 32, 32);
     wallGfx.generateTexture('wall', 32, 32);
     wallGfx.destroy();
+
+    // --- Department-tinted wall textures (60% dark gray + 40% dept color) ---
+    for (const dept of DEPARTMENTS) {
+      const dGfx = this.make.graphics({ add: false });
+      const hex = parseInt(dept.color.replace('#', ''), 16);
+      const r = ((hex >> 16) & 0xff);
+      const g = ((hex >> 8) & 0xff);
+      const b = (hex & 0xff);
+      // Blend: 60% of 0x44 (68) + 40% of department channel
+      const br = Math.round(68 * 0.6 + r * 0.4);
+      const bg = Math.round(68 * 0.6 + g * 0.4);
+      const bb = Math.round(68 * 0.6 + b * 0.4);
+      const blended = (br << 16) | (bg << 8) | bb;
+      dGfx.fillStyle(blended, 1);
+      dGfx.fillRect(0, 0, 32, 32);
+      dGfx.lineStyle(1, blended & 0xd0d0d0, 0.6);
+      dGfx.strokeRect(0, 0, 32, 32);
+      dGfx.generateTexture(`wall_${dept.id}`, 32, 32);
+      dGfx.destroy();
+    }
 
     // --- Obstacle placeholders ---
     const deskGfx = this.make.graphics({ add: false });
@@ -205,11 +229,15 @@ export class BootScene extends Phaser.Scene {
     particleGfx.generateTexture('particle', 4, 4);
     particleGfx.destroy();
 
+    // Dust mote texture: 3px soft white circle for title screen
+    const dustGfx = this.make.graphics({ add: false });
+    dustGfx.fillStyle(0xffffff, 1);
+    dustGfx.fillCircle(3, 3, 3);
+    dustGfx.generateTexture('dust-mote', 6, 6);
+    dustGfx.destroy();
+
     // --- Paper stack overlay (32x32 sprite sheet, 4 frames: 128x32) ---
     this.generatePaperStack();
-
-    // --- Motivational posters (32x32 each) ---
-    this.generatePosters();
 
     // === Register animations ===
     this.registerPlayerAnimations();
@@ -217,6 +245,18 @@ export class BootScene extends Phaser.Scene {
 
     console.log('[BootScene] all assets loaded and textures generated');
     this.scene.start('TitleScene');
+  }
+
+  /** Check if browser supports WebP (synchronous check via canvas) */
+  getWebPSupport() {
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1;
+      canvas.height = 1;
+      return canvas.toDataURL('image/webp').indexOf('data:image/webp') === 0;
+    } catch (_e) {
+      return false;
+    }
   }
 
   /**
@@ -323,41 +363,6 @@ export class BootScene extends Phaser.Scene {
 
     gfx.generateTexture('paper-stack', frameW * 4, frameH);
     gfx.destroy();
-  }
-
-  /** Generate motivational poster wall decorations (32x32 each) */
-  generatePosters() {
-    const posterConfigs = [
-      { key: 'poster-1', frameColor: 0xcc3333, innerColor: 0xff6666 },
-      { key: 'poster-2', frameColor: 0x3366cc, innerColor: 0x6699ff },
-      { key: 'poster-3', frameColor: 0xccaa00, innerColor: 0xffdd44 },
-      { key: 'poster-4', frameColor: 0x33aa33, innerColor: 0x66dd66 },
-    ];
-
-    for (const cfg of posterConfigs) {
-      const gfx = this.make.graphics({ add: false });
-      // Frame border
-      gfx.fillStyle(cfg.frameColor, 1);
-      gfx.fillRect(2, 2, 28, 28);
-      // Inner area
-      gfx.fillStyle(cfg.innerColor, 0.6);
-      gfx.fillRect(5, 5, 22, 22);
-      // Abstract shape (varies per poster)
-      gfx.fillStyle(0xffffff, 0.5);
-      if (cfg.key === 'poster-1') {
-        gfx.fillTriangle(16, 8, 10, 22, 22, 22);
-      } else if (cfg.key === 'poster-2') {
-        gfx.fillCircle(16, 16, 8);
-      } else if (cfg.key === 'poster-3') {
-        gfx.fillRect(10, 10, 12, 12);
-      } else {
-        gfx.fillStyle(0xffffff, 0.4);
-        gfx.fillRect(8, 14, 16, 3);
-        gfx.fillRect(14, 8, 3, 16);
-      }
-      gfx.generateTexture(cfg.key, 32, 32);
-      gfx.destroy();
-    }
   }
 
   /**

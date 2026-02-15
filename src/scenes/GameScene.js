@@ -10,7 +10,7 @@ import { UpgradeManager } from '../systems/UpgradeManager.js';
 import { WaveManager } from '../systems/WaveManager.js';
 import { ParticleManager } from '../systems/ParticleManager.js';
 import { SoundManager } from '../systems/SoundManager.js';
-import { tileToPixel, formatTime } from '../utils/helpers.js';
+import { tileToPixel, formatTime, isTouchDevice } from '../utils/helpers.js';
 import { trackEvent } from '../utils/analytics.js';
 
 export class GameScene extends Phaser.Scene {
@@ -154,11 +154,34 @@ export class GameScene extends Phaser.Scene {
     this.soundManager = new SoundManager(this);
     this.soundManager.init();
 
+    // Set up touch input if device supports it (after soundManager so mute button works)
+    if (isTouchDevice()) {
+      this.player.initTouchInput();
+      this.createMobilePauseButton();
+      this.createMobileMuteButton();
+    }
+
     // Create vignette overlay (4 edge rectangles, hidden by default)
     this.createVignette();
 
     // Wire particle + sound events
     this.wirePolishEvents();
+
+    // Orientation change handler for mobile (auto-pause on portrait rotation)
+    if (isTouchDevice()) {
+      this._orientationHandler = () => {
+        const isPortrait = window.matchMedia('(orientation: portrait)').matches;
+        if (isPortrait && !this.isPaused && !this.isGameOver) {
+          this.togglePause();
+          const overlay = document.getElementById('orientation-overlay');
+          if (overlay) overlay.style.display = 'flex';
+        } else if (!isPortrait) {
+          const overlay = document.getElementById('orientation-overlay');
+          if (overlay) overlay.style.display = 'none';
+        }
+      };
+      window.addEventListener('resize', this._orientationHandler);
+    }
 
     // Register shutdown lifecycle
     this.events.once('shutdown', this.shutdown, this);
@@ -189,6 +212,9 @@ export class GameScene extends Phaser.Scene {
 
     // Check department deliveries
     this.checkDepartmentDeliveries();
+
+    // Check water cooler interaction
+    this.checkWaterCooler();
 
     // Game timer
     this._timerAccumulator += delta;
@@ -279,13 +305,14 @@ export class GameScene extends Phaser.Scene {
       this.addWall(CONFIG.MAP_WIDTH_TILES - 1, y);
     }
 
-    // Room walls from mapData
+    // Room walls from mapData (department walls get tinted textures)
     for (const wall of ROOM_WALLS) {
+      const textureKey = wall.deptId ? `wall_${wall.deptId}` : 'wall';
       for (let x = wall.x; x < wall.x + wall.width; x++) {
         for (let y = wall.y; y < wall.y + wall.height; y++) {
           if (x === 0 || x === CONFIG.MAP_WIDTH_TILES - 1 ||
               y === 0 || y === CONFIG.MAP_HEIGHT_TILES - 1) continue;
-          this.addWall(x, y);
+          this.addWall(x, y, textureKey);
         }
       }
     }
@@ -319,6 +346,9 @@ export class GameScene extends Phaser.Scene {
 
     // === Environment decoration (non-collidable) ===
     this.placeDecoration();
+
+    // Interactive water cooler
+    this.createWaterCooler();
   }
 
   /** Place decorative environment objects around the office */
@@ -403,16 +433,6 @@ export class GameScene extends Phaser.Scene {
     decor(25, 0, 'decor-notice-board', 6);
     decor(18, 0, 'decor-calendar', 6);
 
-    // Posters on internal walls
-    decor(2, 7, 'poster-1', 6);
-    decor(5, 7, 'poster-2', 6);
-    decor(2, 17, 'poster-3', 6);
-    decor(5, 17, 'poster-4', 6);
-    decor(34, 7, 'poster-1', 6);
-    decor(37, 7, 'poster-3', 6);
-    decor(34, 17, 'poster-2', 6);
-    decor(37, 17, 'poster-4', 6);
-
     // Wall clocks and graphs on perimeter
     decorSmall(12, 0, 'decor-wall-clock', 6);
     decorSmall(28, 0, 'decor-wall-graph', 6);
@@ -458,11 +478,232 @@ export class GameScene extends Phaser.Scene {
     decor(36, 21, 'furniture-sofa');
   }
 
+  /** Create the water cooler interactive zone in the Break Room area */
+  createWaterCooler() {
+    const ts = CONFIG.TILE_SIZE;
+    const tileX = CONFIG.WATER_COOLER_TILE_X;
+    const tileY = CONFIG.WATER_COOLER_TILE_Y;
+    const px = tileX * ts + ts / 2;
+    const py = tileY * ts + ts / 2;
+
+    // Visual: use sprite if available, otherwise placeholder rectangle
+    const textureKey = this.textures.exists('env-water-dispenser')
+      ? 'env-water-dispenser' : null;
+
+    if (textureKey) {
+      this.waterCoolerSprite = this.add.image(px, py, textureKey).setDepth(3);
+    } else {
+      this.waterCoolerSprite = this.add.rectangle(px, py, 28, 28, 0x4488cc)
+        .setDepth(3);
+    }
+
+    // Interaction zone (one tile)
+    this.waterCoolerZone = this.add.zone(px, py, ts, ts);
+    this.physics.add.existing(this.waterCoolerZone, true);
+
+    // State
+    this.waterCoolerAvailable = true;
+    this.waterCoolerCooldownTimer = null;
+
+    // Pulsing glow aura — larger and more visible
+    this.waterCoolerGlow = this.add.circle(px, py, 22, 0x44ccff, 0.18)
+      .setDepth(2);
+    this.tweens.add({
+      targets: this.waterCoolerGlow,
+      alpha: { from: 0.18, to: 0.06 },
+      scaleX: { from: 1, to: 1.3 },
+      scaleY: { from: 1, to: 1.3 },
+      yoyo: true,
+      repeat: -1,
+      duration: 1500,
+      ease: 'Sine.easeInOut',
+    });
+
+    // Small sparkle dot on top
+    this.waterCoolerSparkle = this.add.circle(px, py - 16, 3, 0xffffff, 0.7)
+      .setDepth(4);
+    this.tweens.add({
+      targets: this.waterCoolerSparkle,
+      alpha: { from: 0.7, to: 0 },
+      y: py - 22,
+      yoyo: true,
+      repeat: -1,
+      duration: 1000,
+    });
+
+    // Speech bubble system — periodic hints
+    this._waterCoolerSpeechLines = [
+      'Take a break!',
+      'Hydrate & de-stress',
+      'Refill stamina here',
+      'Feeling stressed? Come here!',
+      'Water break?',
+      '-Stress +Stamina',
+    ];
+    this._waterCoolerSpeechBubble = null;
+    this._waterCoolerSpeechTimer = null;
+
+    // First hint after 15s, then every 20-35s
+    this._scheduleWaterCoolerSpeech(15000);
+  }
+
+  /** Schedule the next water cooler speech bubble */
+  _scheduleWaterCoolerSpeech(delay) {
+    this._waterCoolerSpeechTimer = this.time.delayedCall(delay, () => {
+      if (this.isGameOver || this.isPaused) {
+        this._scheduleWaterCoolerSpeech(5000);
+        return;
+      }
+      this._showWaterCoolerSpeech();
+      // Next one in 20-35s
+      const next = 20000 + Math.random() * 15000;
+      this._scheduleWaterCoolerSpeech(next);
+    });
+  }
+
+  /** Show a speech bubble above the water cooler */
+  _showWaterCoolerSpeech() {
+    // Don't show if on cooldown
+    if (!this.waterCoolerAvailable) return;
+
+    // Clean up previous bubble
+    if (this._waterCoolerSpeechBubble) {
+      this._waterCoolerSpeechBubble.destroy();
+      this._waterCoolerSpeechBubble = null;
+    }
+
+    const ts = CONFIG.TILE_SIZE;
+    const px = CONFIG.WATER_COOLER_TILE_X * ts + ts / 2;
+    const py = CONFIG.WATER_COOLER_TILE_Y * ts + ts / 2;
+
+    // Pick a random line
+    const line = this._waterCoolerSpeechLines[
+      Math.floor(Math.random() * this._waterCoolerSpeechLines.length)
+    ];
+
+    const label = this.add.text(0, 0, line, {
+      fontSize: '9px',
+      fontFamily: 'monospace',
+      color: '#225588',
+    }).setOrigin(0.5);
+
+    const bgWidth = label.width + 12;
+    const bgHeight = label.height + 8;
+    const bg = this.add.rectangle(0, 0, bgWidth, bgHeight, 0xffffff, 0.9)
+      .setStrokeStyle(1, 0x88bbdd);
+
+    this._waterCoolerSpeechBubble = this.add.container(px, py - 28, [bg, label])
+      .setDepth(24).setAlpha(0);
+
+    // Fade in, hold, fade out
+    this.tweens.add({
+      targets: this._waterCoolerSpeechBubble,
+      alpha: 1,
+      duration: 300,
+      onComplete: () => {
+        this.time.delayedCall(3500, () => {
+          if (this._waterCoolerSpeechBubble) {
+            this.tweens.add({
+              targets: this._waterCoolerSpeechBubble,
+              alpha: 0,
+              duration: 500,
+              onComplete: () => {
+                if (this._waterCoolerSpeechBubble) {
+                  this._waterCoolerSpeechBubble.destroy();
+                  this._waterCoolerSpeechBubble = null;
+                }
+              },
+            });
+          }
+        });
+      },
+    });
+  }
+
+  /** Check if player overlaps the water cooler zone */
+  checkWaterCooler() {
+    if (!this.waterCoolerZone || !this.waterCoolerAvailable) return;
+
+    const playerBody = this.player.body;
+    const zoneBody = this.waterCoolerZone.body;
+
+    const overlap = Phaser.Geom.Intersects.RectangleToRectangle(
+      new Phaser.Geom.Rectangle(
+        playerBody.x, playerBody.y, playerBody.width, playerBody.height
+      ),
+      new Phaser.Geom.Rectangle(
+        zoneBody.x, zoneBody.y, zoneBody.width, zoneBody.height
+      )
+    );
+
+    if (overlap) {
+      this.useWaterCooler();
+    }
+  }
+
+  /** Use the water cooler: reduce stress, restore stamina, start cooldown */
+  useWaterCooler() {
+    this.waterCoolerAvailable = false;
+
+    // Apply stress relief
+    const stressRelief = CONFIG.WATER_COOLER_STRESS_RELIEF;
+    this.stressManager.relieveStress(stressRelief);
+
+    // Apply stamina restore
+    const staminaRestore = CONFIG.WATER_COOLER_STAMINA_RESTORE;
+    this.player.stamina = Math.min(
+      this.player.stamina + staminaRestore,
+      CONFIG.PLAYER_STAMINA_MAX
+    );
+
+    // Emit event for UIScene floating text
+    this.events.emit('water-cooler-used', { stressRelief, staminaRestore });
+
+    // Play pickup sound as feedback
+    if (this.soundManager) {
+      this.soundManager.playPickup();
+    }
+
+    // Dim sprite and hide glow/sparkle/speech during cooldown
+    if (this.waterCoolerSprite) {
+      this.waterCoolerSprite.setAlpha(0.5);
+    }
+    if (this.waterCoolerGlow) {
+      this.waterCoolerGlow.setVisible(false);
+    }
+    if (this.waterCoolerSparkle) {
+      this.waterCoolerSparkle.setVisible(false);
+    }
+    if (this._waterCoolerSpeechBubble) {
+      this._waterCoolerSpeechBubble.destroy();
+      this._waterCoolerSpeechBubble = null;
+    }
+
+    // Cooldown timer
+    this.waterCoolerCooldownTimer = this.time.delayedCall(
+      CONFIG.WATER_COOLER_COOLDOWN,
+      () => {
+        this.waterCoolerAvailable = true;
+        if (this.waterCoolerSprite) {
+          this.waterCoolerSprite.setAlpha(1);
+        }
+        if (this.waterCoolerGlow) {
+          this.waterCoolerGlow.setVisible(true);
+        }
+        if (this.waterCoolerSparkle) {
+          this.waterCoolerSparkle.setVisible(true);
+        }
+      }
+    );
+
+    console.debug('[GameScene] water cooler used');
+  }
+
   /** Helper to add a wall tile at grid position */
-  addWall(tileX, tileY) {
+  addWall(tileX, tileY, textureKey = 'wall') {
     const ts = CONFIG.TILE_SIZE;
     const wall = this.wallGroup.create(
-      tileX * ts + ts / 2, tileY * ts + ts / 2, 'wall'
+      tileX * ts + ts / 2, tileY * ts + ts / 2, textureKey
     );
     wall.setDepth(5);
     wall.refreshBody();
@@ -835,10 +1076,21 @@ export class GameScene extends Phaser.Scene {
     });
 
     // Resume audio context and start BGM on first interaction (autoplay policy)
-    this.input.once('pointerdown', () => {
-      this.soundManager.resume();
-      this.soundManager.startBGM();
-    });
+    // Listen on both pointerdown and pointerup for mobile compatibility.
+    // On iOS, resume() plays a silent buffer to unlock the context, then we start BGM.
+    const resumeAudio = () => {
+      this.input.off('pointerdown', resumeAudio);
+      this.input.off('pointerup', resumeAudio);
+      const sm = this.soundManager;
+      sm.resume().then(() => {
+        sm.startBGM();
+      }).catch(() => {
+        // Fallback: retry after a short delay (some iOS versions are slow to unlock)
+        setTimeout(() => { sm.resume(); sm.startBGM(); }, 200);
+      });
+    };
+    this.input.on('pointerdown', resumeAudio);
+    this.input.on('pointerup', resumeAudio);
 
     // Also start BGM immediately if context is already running (e.g., replay)
     if (this.soundManager.ctx && this.soundManager.ctx.state === 'running') {
@@ -918,6 +1170,60 @@ export class GameScene extends Phaser.Scene {
     };
   }
 
+  /** Create a visible pause button for mobile (top-right corner) */
+  createMobilePauseButton() {
+    const hitSize = CONFIG.MOBILE_PAUSE_HIT_SIZE;
+    const x = CONFIG.CANVAS_WIDTH - 50;
+    const y = 30;
+
+    // Semi-transparent dark circle for contrast
+    const bgCircle = this.add.circle(x, y, 20, 0x000000, 0.5)
+      .setScrollFactor(0).setDepth(500);
+
+    // Invisible hit area (larger touch target)
+    const hitArea = this.add.rectangle(x, y, hitSize, hitSize, 0x000000, 0)
+      .setScrollFactor(0).setDepth(502)
+      .setInteractive({ useHandCursor: true });
+
+    // Visible pause icon (two bars)
+    const gfx = this.add.graphics().setScrollFactor(0).setDepth(501);
+    gfx.fillStyle(0xffffff, 0.9);
+    gfx.fillRect(x - 8, y - 10, 6, 20);
+    gfx.fillRect(x + 2, y - 10, 6, 20);
+
+    hitArea.on('pointerdown', () => this.togglePause());
+
+    this.mobilePauseBtn = { hitArea, gfx, bgCircle };
+  }
+
+  /** Create a mute/unmute toggle button for mobile (left of pause button) */
+  createMobileMuteButton() {
+    const x = CONFIG.CANVAS_WIDTH - 100;
+    const y = 30;
+
+    // Semi-transparent dark circle background
+    const bgCircle = this.add.circle(x, y, 20, 0x000000, 0.5)
+      .setScrollFactor(0).setDepth(500);
+
+    // Hit area
+    const hitArea = this.add.rectangle(x, y, CONFIG.MOBILE_PAUSE_HIT_SIZE, CONFIG.MOBILE_PAUSE_HIT_SIZE, 0x000000, 0)
+      .setScrollFactor(0).setDepth(502)
+      .setInteractive({ useHandCursor: true });
+
+    // Text icon: musical note for unmuted, X for muted
+    const icon = this.add.text(x, y, this.soundManager.muted ? 'x' : '♪', {
+      fontSize: '20px', fontFamily: 'monospace', color: '#ffffff',
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(501);
+
+    hitArea.on('pointerdown', () => {
+      this.soundManager.resume();
+      this.soundManager.toggleMute();
+      icon.setText(this.soundManager.muted ? 'x' : '♪');
+    });
+
+    this.mobileMuteBtn = { hitArea, bgCircle, icon };
+  }
+
   /** Handle pause/resume */
   togglePause() {
     if (this.isGameOver) return;
@@ -960,12 +1266,14 @@ export class GameScene extends Phaser.Scene {
       fontStyle: 'bold',
     }).setOrigin(0.5));
 
+    const isTouch = isTouchDevice();
+
     // Resume button
     const resumeBg = addPauseElement(
       this.add.rectangle(cx, cy, 160, 36, 0x4169E1)
         .setInteractive({ useHandCursor: true })
     );
-    addPauseElement(this.add.text(cx, cy, 'Resume (P)', {
+    addPauseElement(this.add.text(cx, cy, isTouch ? 'Resume' : 'Resume (P)', {
       fontSize: '16px', fontFamily: 'monospace', color: '#ffffff',
     }).setOrigin(0.5));
     resumeBg.on('pointerdown', () => this.togglePause());
@@ -975,7 +1283,7 @@ export class GameScene extends Phaser.Scene {
       this.add.rectangle(cx, cy + 50, 160, 36, 0x555555)
         .setInteractive({ useHandCursor: true })
     );
-    addPauseElement(this.add.text(cx, cy + 50, 'How to Play (H)', {
+    addPauseElement(this.add.text(cx, cy + 50, isTouch ? 'How to Play' : 'How to Play (H)', {
       fontSize: '16px', fontFamily: 'monospace', color: '#ffffff',
     }).setOrigin(0.5));
     htpBg.on('pointerdown', () => this.showHowToPlay());
@@ -985,7 +1293,7 @@ export class GameScene extends Phaser.Scene {
       this.add.rectangle(cx, cy + 100, 160, 36, 0x555555)
         .setInteractive({ useHandCursor: true })
     );
-    addPauseElement(this.add.text(cx, cy + 100, 'Restart (R)', {
+    addPauseElement(this.add.text(cx, cy + 100, isTouch ? 'Restart' : 'Restart (R)', {
       fontSize: '16px', fontFamily: 'monospace', color: '#ffffff',
     }).setOrigin(0.5));
     restartBg.on('pointerdown', () => this.pauseRestart());
@@ -995,15 +1303,34 @@ export class GameScene extends Phaser.Scene {
       this.add.rectangle(cx, cy + 150, 160, 36, 0x555555)
         .setInteractive({ useHandCursor: true })
     );
-    addPauseElement(this.add.text(cx, cy + 150, 'Quit to Menu (Q)', {
+    addPauseElement(this.add.text(cx, cy + 150, isTouch ? 'Quit to Menu' : 'Quit to Menu (Q)', {
       fontSize: '16px', fontFamily: 'monospace', color: '#ffffff',
     }).setOrigin(0.5));
     quitBg.on('pointerdown', () => this.pauseQuit());
 
-    // Sound hint
-    addPauseElement(this.add.text(cx, cy + 200, 'M to toggle sound', {
-      fontSize: '11px', fontFamily: 'monospace', color: '#888888',
-    }).setOrigin(0.5));
+    // Sound toggle — tappable button on mobile, static hint on desktop
+    if (isTouch) {
+      const soundLabel = this.soundManager.muted ? 'Sound: OFF' : 'Sound: ON';
+      addPauseElement(
+        this.add.rectangle(cx, cy + 200, 160, 36, 0x2E8B57)
+      );
+      const soundText = addPauseElement(this.add.text(cx, cy + 200, soundLabel, {
+        fontSize: '14px', fontFamily: 'monospace', color: '#ffffff',
+      }).setOrigin(0.5).setInteractive({ useHandCursor: true }));
+      const toggleSound = () => {
+        this.soundManager.resume();
+        this.soundManager.toggleMute();
+        soundText.setText(this.soundManager.muted ? 'Sound: OFF' : 'Sound: ON');
+        if (this.mobileMuteBtn && this.mobileMuteBtn.icon) {
+          this.mobileMuteBtn.icon.setText(this.soundManager.muted ? 'x' : '♪');
+        }
+      };
+      soundText.on('pointerdown', toggleSound);
+    } else {
+      addPauseElement(this.add.text(cx, cy + 200, 'M to toggle sound', {
+        fontSize: '11px', fontFamily: 'monospace', color: '#888888',
+      }).setOrigin(0.5));
+    }
 
     // Keyboard shortcuts for pause menu
     this._pauseKeyR = (e) => { if (this.isPaused) this.pauseRestart(); };
@@ -1135,7 +1462,12 @@ export class GameScene extends Phaser.Scene {
 
     // Launch game over scene after delay (allows flash/shake to play out)
     this.time.delayedCall(CONFIG.GAME_OVER_DELAY, () => {
+      // Disable GameScene input so it can't intercept keys (e.g. ESC → togglePause)
+      this.input.enabled = false;
+      this.input.keyboard.enabled = false;
+
       this.scene.launch('GameOverScene', { won, stats });
+      this.scene.bringToTop('GameOverScene');
     });
   }
 
@@ -1157,6 +1489,11 @@ export class GameScene extends Phaser.Scene {
     if (this.vignettePulseTween) {
       this.vignettePulseTween.stop();
       this.vignettePulseTween = null;
+    }
+
+    // Orientation handler cleanup
+    if (this._orientationHandler) {
+      window.removeEventListener('resize', this._orientationHandler);
     }
 
     if (this.taskManager) this.taskManager.destroy();

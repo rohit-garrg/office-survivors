@@ -2,12 +2,15 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <title>Office Survivors - A Satirical Office Game</title>
   <meta property="og:title" content="Office Survivors - A Satirical Office Game" />
   <meta property="og:description" content="Survive a 10-minute corporate workday. Deliver tasks. Dodge chaos agents. Climb from Intern to CEO." />
   <meta property="og:image" content="/og-image.png" />
   <meta property="og:type" content="website" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
   <!-- Built with AI: Claude Code + PixelLab -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-X6LXZDSYG8"></script>
   <script>
@@ -20,17 +23,58 @@
   </script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
+    html, body {
       background: #1a1a2e;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+    #game-container {
+      width: 100%;
+      height: 100%;
       display: flex;
       justify-content: center;
       align-items: center;
-      min-height: 100vh;
-      overflow: hidden;
     }
+    #orientation-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: #1a1a2e;
+      z-index: 20000;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      color: white;
+      font-family: monospace;
+      text-align: center;
+    }
+    #orientation-overlay .rotate-icon { font-size: 64px; margin-bottom: 20px; }
+    #orientation-overlay p { font-size: 18px; }
   </style>
 </head>
 <body>
+  <div id="game-container"></div>
+  <div id="orientation-overlay">
+    <div class="rotate-icon">&#128241;&#8596;&#65039;</div>
+    <p>Rotate your phone to play</p>
+    <p style="font-size: 12px; color: #888; margin-top: 8px;">Landscape mode only</p>
+  </div>
+  <script>
+    // Orientation detection for mobile
+    (function() {
+      function checkOrientation() {
+        var isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        var overlay = document.getElementById('orientation-overlay');
+        if (!isMobile || !overlay) return;
+        var isPortrait = window.matchMedia('(orientation: portrait)').matches;
+        overlay.style.display = isPortrait ? 'flex' : 'none';
+      }
+      window.addEventListener('orientationchange', function() { setTimeout(checkOrientation, 100); });
+      window.addEventListener('resize', checkOrientation);
+      checkOrientation();
+    })();
+  </script>
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>

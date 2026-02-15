@@ -37,10 +37,10 @@ export class Micromanager extends ChaosAgent {
   update(time, delta) {
     if (!this.isActive) return;
 
-    // Always target the player
+    // Always target the player (use updateTargetPosition to preserve stuck detection)
     const player = this.scene.player;
     if (player) {
-      this.setTarget(player.x, player.y);
+      this.updateTargetPosition(player.x, player.y);
     }
 
     // Base movement (handles stuck detection, idle, etc.)

@@ -2,7 +2,9 @@ import Phaser from 'phaser';
 import CONFIG from '../config/gameConfig.js';
 import { HUD } from '../ui/HUD.js';
 import { FloatingText } from '../ui/FloatingText.js';
+import { Toast } from '../ui/Toast.js';
 import { DEPARTMENT_COLORS } from '../config/mapData.js';
+import { isTouchDevice } from '../utils/helpers.js';
 
 /** Descriptions shown on first spawn of each agent type */
 const AGENT_INTRO_DESCRIPTIONS = {
@@ -33,6 +35,12 @@ export class UIScene extends Phaser.Scene {
     this.hud.create();
 
     this.floatingText = new FloatingText(this);
+    this.toast = new Toast(this);
+
+    // Sprint hint and sound prompt tracking flags
+    this._hasShownSprintHint = false;
+    this._hasEverSprinted = false;
+    this._hasShownSoundPrompt = false;
 
     // Create a FloatingText on GameScene for world-space text (scrolls with camera)
     const gameScene = this.scene.get('GameScene');
@@ -110,7 +118,7 @@ export class UIScene extends Phaser.Scene {
     };
 
     this._onUpgradeCapacityChanged = (data) => {
-      this.hud.addTaskSlots(data.capacity);
+      this.hud.updateTaskCapacity(data.capacity);
     };
 
     this._onMilestoneBonus = (data) => {
@@ -191,6 +199,70 @@ export class UIScene extends Phaser.Scene {
       this.hud.hideDeptBlocked(data.department);
     };
 
+    // === Water cooler floating text feedback ===
+    this._onWaterCoolerUsed = (data) => {
+      const player = gameScene.player;
+      if (player) {
+        this.gameFloatingText.show(
+          `-${data.stressRelief}% Stress`,
+          player.x, player.y, '#44ccff'
+        );
+        gameScene.time.delayedCall(200, () => {
+          if (player) {
+            this.gameFloatingText.show(
+              `+${data.staminaRestore} Stamina`,
+              player.x, player.y + 20, '#44ccff'
+            );
+          }
+        });
+      }
+    };
+
+    // === Sprint hint toast: show when stress hits threshold and player hasn't sprinted ===
+    this._onShiftDown = () => {
+      this._hasEverSprinted = true;
+    };
+    if (gameScene.input && gameScene.input.keyboard) {
+      gameScene.input.keyboard.on('keydown-SHIFT', this._onShiftDown);
+    }
+
+    this._onStressForHint = (data) => {
+      if (!this._hasShownSprintHint &&
+          !this._hasEverSprinted &&
+          data.percent >= CONFIG.SPRINT_HINT_STRESS_THRESHOLD) {
+        this._hasShownSprintHint = true;
+        const sprintMsg = isTouchDevice() ? 'Hold to sprint!' : 'Hold SHIFT to sprint!';
+        this.toast.show(sprintMsg);
+      }
+    };
+    gameScene.events.on('stress-changed', this._onStressForHint);
+
+    // === Tap-to-move onboarding toast for touch devices ===
+    if (isTouchDevice()) {
+      gameScene.time.delayedCall(2000, () => {
+        this.toast.show('Tap anywhere to move. Hold to sprint!');
+      });
+    }
+
+    // === Sound prompt toast: 5s after game start, if sound is muted ===
+    this._soundPromptTimer = gameScene.time.delayedCall(CONFIG.SOUND_PROMPT_DELAY, () => {
+      if (this._hasShownSoundPrompt) return;
+
+      const soundManager = gameScene.soundManager;
+      const isMuted = !soundManager ||
+                      !soundManager.initialized ||
+                      soundManager.muted ||
+                      (soundManager.ctx && soundManager.ctx.state === 'suspended');
+
+      if (isMuted) {
+        this._hasShownSoundPrompt = true;
+        const soundMsg = isTouchDevice()
+          ? 'Play with sound for the best experience!'
+          : 'Play with sound for the best experience! Press M to toggle.';
+        this.toast.show(soundMsg);
+      }
+    });
+
     // Register all listeners
     gameScene.events.on('stress-changed', this._onStressChanged);
     gameScene.events.on('xp-gained', this._onXPGained);
@@ -207,6 +279,7 @@ export class UIScene extends Phaser.Scene {
     gameScene.events.on('agent-disruption', this._onAgentDisruption);
     gameScene.events.on('department-blocked', this._onDeptBlocked);
     gameScene.events.on('department-unblocked', this._onDeptUnblocked);
+    gameScene.events.on('water-cooler-used', this._onWaterCoolerUsed);
   }
 
   /** Update HUD elements each frame (stamina, task indicators, upgrades) */
@@ -248,6 +321,23 @@ export class UIScene extends Phaser.Scene {
       gameScene.events.off('agent-disruption', this._onAgentDisruption);
       gameScene.events.off('department-blocked', this._onDeptBlocked);
       gameScene.events.off('department-unblocked', this._onDeptUnblocked);
+      gameScene.events.off('water-cooler-used', this._onWaterCoolerUsed);
+
+      // Sprint hint cleanup
+      gameScene.events.off('stress-changed', this._onStressForHint);
+      if (this._onShiftDown && gameScene.input && gameScene.input.keyboard) {
+        gameScene.input.keyboard.off('keydown-SHIFT', this._onShiftDown);
+      }
+
+      // Sound prompt cleanup
+      if (this._soundPromptTimer) {
+        this._soundPromptTimer.remove();
+      }
+    }
+
+    // Toast cleanup
+    if (this.toast) {
+      this.toast.destroy();
     }
   }
 }
