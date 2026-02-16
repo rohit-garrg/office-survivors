@@ -162,7 +162,7 @@ export default {
   TASK_PULSE_DURATION: 800,  // ms half-cycle for pulse tween
   TASK_GLOW_ALPHA: 0.25,    // opacity of glow halo behind task icon
   FLOATING_TEXT_MAX_LENGTH: 45, // truncate floating text beyond this (was 30)
-  FLOATING_TEXT_DURATION: 2500,    // ms before fade-out (was hardcoded 2000)
+  FLOATING_TEXT_DURATION: 3000,    // ms before fade-out (was 2500 — half-second longer for readability)
   FLOATING_TEXT_FONT_SIZE: '12px', // pickup popup size (was hardcoded '11px')
   TASK_STRIP_MAX_NAME_LENGTH: 70,  // chars before truncation in bottom strip (960px canvas fits ~120 chars at 13px mono)
 
@@ -179,6 +179,7 @@ export default {
   TOAST_FADE_IN: 300,         // ms
   TOAST_FADE_OUT: 500,        // ms
   SPRINT_HINT_STRESS_THRESHOLD: 50,  // % stress to trigger sprint hint
+  TUTORIAL_IDLE_DELAY: 3000,          // ms before showing move hint for idle players
 
   // === SOUND PROMPT ===
   SOUND_PROMPT_DELAY: 5000,   // ms after game start before sound prompt

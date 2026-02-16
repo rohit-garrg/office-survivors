@@ -221,34 +221,41 @@ export class HUD {
       }
     }
 
-    // === BOTTOM TASK STRIP: only show for multi-stop route tasks ===
-    const multiStopTasks = tasks.filter((t) => t.totalStops > 1 && t.route);
+    // === BOTTOM TASK STRIP: show ALL carried tasks (name + destination) ===
     const stripX = 90;
     const stripBottom = 536;
     const rowHeight = 18;
 
     for (let i = 0; i < this.taskStripRows.length; i++) {
       const stripRow = this.taskStripRows[i];
-      if (i < multiStopTasks.length) {
-        const task = multiStopTasks[i];
+      if (i < tasks.length) {
+        const task = tasks[i];
         const deptId = task.getCurrentDepartment();
         const colorHex = DEPARTMENT_COLORS[deptId];
         const color = colorHex ? hexToInt(colorHex) : 0x888888;
 
-        const rowY = stripBottom - (multiStopTasks.length - i) * rowHeight;
+        const rowY = stripBottom - (tasks.length - i) * rowHeight;
         stripRow.dot.setPosition(stripX, rowY + 7).setFillStyle(color).setVisible(true);
 
-        // Show route progress: Eng > Mkt > Fin (with checkmarks for completed stops)
-        let routeText = task.route.map((dept, idx) => {
-          const abbrev = DEPARTMENT_ABBREV[dept] || dept;
-          if (idx < task.currentStop) return `\u2713${abbrev}`;
-          return abbrev;
-        }).join(' > ');
-
-        if (routeText.length > CONFIG.TASK_STRIP_MAX_NAME_LENGTH) {
-          routeText = routeText.substring(0, CONFIG.TASK_STRIP_MAX_NAME_LENGTH - 3) + '...';
+        let displayText;
+        if (task.totalStops > 1 && task.route) {
+          // Multi-stop: "Task Name | ENG > ✓MKT > FIN"
+          const routePart = task.route.map((dept, idx) => {
+            const abbrev = DEPARTMENT_ABBREV[dept] || dept;
+            if (idx < task.currentStop) return `\u2713${abbrev}`;
+            return abbrev;
+          }).join(' > ');
+          displayText = `${task.taskName} | ${routePart}`;
+        } else {
+          // Single-stop: "Task Name -> MKT"
+          const abbrev = DEPARTMENT_ABBREV[deptId] || deptId;
+          displayText = `${task.taskName} -> ${abbrev}`;
         }
-        stripRow.text.setPosition(stripX + 14, rowY).setText(routeText).setVisible(true);
+
+        if (displayText.length > CONFIG.TASK_STRIP_MAX_NAME_LENGTH) {
+          displayText = displayText.substring(0, CONFIG.TASK_STRIP_MAX_NAME_LENGTH - 3) + '...';
+        }
+        stripRow.text.setPosition(stripX + 14, rowY).setText(displayText).setVisible(true);
       } else {
         stripRow.dot.setVisible(false);
         stripRow.text.setVisible(false);
@@ -256,8 +263,8 @@ export class HUD {
     }
 
     // Show/resize background for bottom strip
-    if (multiStopTasks.length > 0) {
-      const panelHeight = multiStopTasks.length * rowHeight + 8;
+    if (tasks.length > 0) {
+      const panelHeight = tasks.length * rowHeight + 8;
       this.taskStripBg.setSize(800, panelHeight).setVisible(true);
     } else {
       this.taskStripBg.setVisible(false);

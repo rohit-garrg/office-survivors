@@ -808,6 +808,8 @@ export class GameScene extends Phaser.Scene {
           });
 
           console.debug(`[GameScene] picked up: "${task.taskName}"`);
+        } else if (this.player.inventory.length >= this.player.taskCapacity) {
+          this.events.emit('task-pickup-failed', { task, player: this.player, reason: 'capacity' });
         }
       }
     }

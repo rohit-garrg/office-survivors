@@ -3,6 +3,7 @@ import CONFIG from '../config/gameConfig.js';
 import { HUD } from '../ui/HUD.js';
 import { FloatingText } from '../ui/FloatingText.js';
 import { Toast } from '../ui/Toast.js';
+import { TutorialManager } from '../systems/TutorialManager.js';
 import { DEPARTMENT_COLORS } from '../config/mapData.js';
 import { isTouchDevice } from '../utils/helpers.js';
 
@@ -36,6 +37,7 @@ export class UIScene extends Phaser.Scene {
 
     this.floatingText = new FloatingText(this);
     this.toast = new Toast(this);
+    this.tutorialManager = new TutorialManager(this, this.toast);
 
     // Sprint hint and sound prompt tracking flags
     this._hasShownSprintHint = false;
@@ -295,6 +297,11 @@ export class UIScene extends Phaser.Scene {
     // Update task indicators every frame
     this.hud.updateTasks(player.inventory);
 
+    // Update tutorial hints
+    if (this.tutorialManager) {
+      this.tutorialManager.update();
+    }
+
     // Update active upgrade indicators
     if (gameScene.upgradeManager) {
       const activeUpgrades = gameScene.upgradeManager.getActiveUpgradesList();
@@ -333,6 +340,11 @@ export class UIScene extends Phaser.Scene {
       if (this._soundPromptTimer) {
         this._soundPromptTimer.remove();
       }
+    }
+
+    // Tutorial cleanup
+    if (this.tutorialManager) {
+      this.tutorialManager.destroy();
     }
 
     // Toast cleanup
