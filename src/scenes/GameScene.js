@@ -104,14 +104,22 @@ export class GameScene extends Phaser.Scene {
     this._onCeoMilestone = (data) => {
       if (this.isGameOver) return;
 
-      // Always grant the passive stress decay bonus
-      this.stressManager.addMilestoneDecay(CONFIG.MILESTONE_STRESS_DECAY_BONUS);
+      // Grant cumulative XP multiplier bonus
+      this.progressionManager.addMilestoneXPBonus(CONFIG.MILESTONE_XP_MULTIPLIER_BONUS);
+
+      // IPO Bell celebration at milestone 3
+      const isIPOBell = data.milestoneNumber === CONFIG.MILESTONE_IPO_BELL;
+      const currentMult = this.progressionManager.getMilestoneXPMultiplier();
 
       // Get upgrade options — if pool is empty, skip popup
       const upgrades = this.upgradeManager.getUpgradeOptions(this.progressionManager.level);
       if (!upgrades || upgrades.length === 0) {
-        console.debug('[GameScene] CEO milestone #' + data.milestoneNumber + ' — no upgrades, silent stress bonus');
-        this.events.emit('milestone-bonus', { milestoneNumber: data.milestoneNumber });
+        console.debug('[GameScene] CEO milestone #' + data.milestoneNumber + ' — no upgrades, silent XP bonus');
+        this.events.emit('milestone-bonus', {
+          milestoneNumber: data.milestoneNumber,
+          xpMultiplier: currentMult,
+          isIPOBell,
+        });
         return;
       }
 
@@ -125,8 +133,12 @@ export class GameScene extends Phaser.Scene {
       });
 
       if (allStale) {
-        console.debug('[GameScene] CEO milestone #' + data.milestoneNumber + ' — all upgrades stale, silent stress bonus');
-        this.events.emit('milestone-bonus', { milestoneNumber: data.milestoneNumber });
+        console.debug('[GameScene] CEO milestone #' + data.milestoneNumber + ' — all upgrades stale, silent XP bonus');
+        this.events.emit('milestone-bonus', {
+          milestoneNumber: data.milestoneNumber,
+          xpMultiplier: currentMult,
+          isIPOBell,
+        });
         return;
       }
 
@@ -162,7 +174,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     // Create vignette overlay (4 edge rectangles, hidden by default)
-    this.createVignette();
+    this.createVignetteGlow();
 
     // Wire particle + sound events
     this.wirePolishEvents();
@@ -264,16 +276,10 @@ export class GameScene extends Phaser.Scene {
       const pw = dept.size.width * ts;
       const ph = dept.size.height * ts;
 
-      // Visual zone (tiled)
-      for (let x = 0; x < dept.size.width; x++) {
-        for (let y = 0; y < dept.size.height; y++) {
-          this.add.image(
-            px + x * ts + ts / 2,
-            py + y * ts + ts / 2,
-            `zone_${dept.id}`
-          ).setDepth(1);
-        }
-      }
+      // Visual zone (single rectangle — avoids tile seam artifacts)
+      const color = parseInt(dept.color.replace('#', ''), 16);
+      this.add.rectangle(px + pw / 2, py + ph / 2, pw, ph, color, 0.18)
+        .setDepth(1);
 
       // Department label
       this.add.text(px + pw / 2, py + ph / 2, dept.name, {
@@ -391,7 +397,7 @@ export class GameScene extends Phaser.Scene {
     decorSmall(30, 7, 'env-plant-small');
 
     // === Water cooler / coffee / vending ===
-    decor(20, 7, 'env-water-dispenser');
+    // Note: water dispenser at (20,7) is now an interactive cooler, not decoration
     decorSmall(21, 7, 'env-coffee-machine');
     decor(19, 22, 'env-vending-machine');
 
@@ -478,58 +484,14 @@ export class GameScene extends Phaser.Scene {
     decor(36, 21, 'furniture-sofa');
   }
 
-  /** Create the water cooler interactive zone in the Break Room area */
+  /** Create interactive water cooler zones (supports multiple coolers) */
   createWaterCooler() {
     const ts = CONFIG.TILE_SIZE;
-    const tileX = CONFIG.WATER_COOLER_TILE_X;
-    const tileY = CONFIG.WATER_COOLER_TILE_Y;
-    const px = tileX * ts + ts / 2;
-    const py = tileY * ts + ts / 2;
-
-    // Visual: use sprite if available, otherwise placeholder rectangle
+    const positions = CONFIG.WATER_COOLER_POSITIONS;
     const textureKey = this.textures.exists('env-water-dispenser')
       ? 'env-water-dispenser' : null;
 
-    if (textureKey) {
-      this.waterCoolerSprite = this.add.image(px, py, textureKey).setDepth(3);
-    } else {
-      this.waterCoolerSprite = this.add.rectangle(px, py, 28, 28, 0x4488cc)
-        .setDepth(3);
-    }
-
-    // Interaction zone (one tile)
-    this.waterCoolerZone = this.add.zone(px, py, ts, ts);
-    this.physics.add.existing(this.waterCoolerZone, true);
-
-    // State
-    this.waterCoolerAvailable = true;
-    this.waterCoolerCooldownTimer = null;
-
-    // Pulsing glow aura — larger and more visible
-    this.waterCoolerGlow = this.add.circle(px, py, 22, 0x44ccff, 0.18)
-      .setDepth(2);
-    this.tweens.add({
-      targets: this.waterCoolerGlow,
-      alpha: { from: 0.18, to: 0.06 },
-      scaleX: { from: 1, to: 1.3 },
-      scaleY: { from: 1, to: 1.3 },
-      yoyo: true,
-      repeat: -1,
-      duration: 1500,
-      ease: 'Sine.easeInOut',
-    });
-
-    // Small sparkle dot on top
-    this.waterCoolerSparkle = this.add.circle(px, py - 16, 3, 0xffffff, 0.7)
-      .setDepth(4);
-    this.tweens.add({
-      targets: this.waterCoolerSparkle,
-      alpha: { from: 0.7, to: 0 },
-      y: py - 22,
-      yoyo: true,
-      repeat: -1,
-      duration: 1000,
-    });
+    this.waterCoolers = [];
 
     // Speech bubble system — periodic hints
     this._waterCoolerSpeechLines = [
@@ -540,8 +502,56 @@ export class GameScene extends Phaser.Scene {
       'Water break?',
       '-Stress +Stamina',
     ];
-    this._waterCoolerSpeechBubble = null;
     this._waterCoolerSpeechTimer = null;
+
+    for (const pos of positions) {
+      const px = pos.x * ts + ts / 2;
+      const py = pos.y * ts + ts / 2;
+
+      // Visual sprite
+      let sprite;
+      if (textureKey) {
+        sprite = this.add.image(px, py, textureKey).setDepth(3);
+      } else {
+        sprite = this.add.rectangle(px, py, 28, 28, 0x4488cc).setDepth(3);
+      }
+
+      // Interaction zone
+      const zone = this.add.zone(px, py, ts, ts);
+      this.physics.add.existing(zone, true);
+
+      // Pulsing glow aura
+      const glow = this.add.circle(px, py, 22, 0x44ccff, 0.18).setDepth(2);
+      this.tweens.add({
+        targets: glow,
+        alpha: { from: 0.18, to: 0.06 },
+        scaleX: { from: 1, to: 1.3 },
+        scaleY: { from: 1, to: 1.3 },
+        yoyo: true,
+        repeat: -1,
+        duration: 1500,
+        ease: 'Sine.easeInOut',
+      });
+
+      // Sparkle dot
+      const sparkle = this.add.circle(px, py - 16, 3, 0xffffff, 0.7).setDepth(4);
+      this.tweens.add({
+        targets: sparkle,
+        alpha: { from: 0.7, to: 0 },
+        y: py - 22,
+        yoyo: true,
+        repeat: -1,
+        duration: 1000,
+      });
+
+      this.waterCoolers.push({
+        sprite, zone, glow, sparkle,
+        px, py,
+        available: true,
+        cooldownTimer: null,
+        speechBubble: null,
+      });
+    }
 
     // First hint after 15s, then every 20-35s
     this._scheduleWaterCoolerSpeech(15000);
@@ -561,20 +571,28 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  /** Show a speech bubble above the water cooler */
+  /** Show a speech bubble above the closest available water cooler */
   _showWaterCoolerSpeech() {
-    // Don't show if on cooldown
-    if (!this.waterCoolerAvailable) return;
-
-    // Clean up previous bubble
-    if (this._waterCoolerSpeechBubble) {
-      this._waterCoolerSpeechBubble.destroy();
-      this._waterCoolerSpeechBubble = null;
+    // Find an available cooler closest to the player
+    let bestCooler = null;
+    let bestDist = Infinity;
+    for (const cooler of this.waterCoolers) {
+      if (!cooler.available) continue;
+      const dist = Phaser.Math.Distance.Between(
+        this.player.x, this.player.y, cooler.px, cooler.py
+      );
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestCooler = cooler;
+      }
     }
+    if (!bestCooler) return;
 
-    const ts = CONFIG.TILE_SIZE;
-    const px = CONFIG.WATER_COOLER_TILE_X * ts + ts / 2;
-    const py = CONFIG.WATER_COOLER_TILE_Y * ts + ts / 2;
+    // Clean up previous bubble on this cooler
+    if (bestCooler.speechBubble) {
+      bestCooler.speechBubble.destroy();
+      bestCooler.speechBubble = null;
+    }
 
     // Pick a random line
     const line = this._waterCoolerSpeechLines[
@@ -582,9 +600,10 @@ export class GameScene extends Phaser.Scene {
     ];
 
     const label = this.add.text(0, 0, line, {
-      fontSize: '9px',
+      fontSize: '11px',
       fontFamily: 'monospace',
       color: '#225588',
+      resolution: 3,
     }).setOrigin(0.5);
 
     const bgWidth = label.width + 12;
@@ -592,25 +611,26 @@ export class GameScene extends Phaser.Scene {
     const bg = this.add.rectangle(0, 0, bgWidth, bgHeight, 0xffffff, 0.9)
       .setStrokeStyle(1, 0x88bbdd);
 
-    this._waterCoolerSpeechBubble = this.add.container(px, py - 28, [bg, label])
+    const bubble = this.add.container(bestCooler.px, bestCooler.py - 28, [bg, label])
       .setDepth(24).setAlpha(0);
+    bestCooler.speechBubble = bubble;
 
     // Fade in, hold, fade out
     this.tweens.add({
-      targets: this._waterCoolerSpeechBubble,
+      targets: bubble,
       alpha: 1,
       duration: 300,
       onComplete: () => {
         this.time.delayedCall(3500, () => {
-          if (this._waterCoolerSpeechBubble) {
+          if (bestCooler.speechBubble === bubble) {
             this.tweens.add({
-              targets: this._waterCoolerSpeechBubble,
+              targets: bubble,
               alpha: 0,
               duration: 500,
               onComplete: () => {
-                if (this._waterCoolerSpeechBubble) {
-                  this._waterCoolerSpeechBubble.destroy();
-                  this._waterCoolerSpeechBubble = null;
+                if (bestCooler.speechBubble === bubble) {
+                  bubble.destroy();
+                  bestCooler.speechBubble = null;
                 }
               },
             });
@@ -620,30 +640,35 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  /** Check if player overlaps the water cooler zone */
+  /** Check if player overlaps any available water cooler zone */
   checkWaterCooler() {
-    if (!this.waterCoolerZone || !this.waterCoolerAvailable) return;
+    if (!this.waterCoolers) return;
 
     const playerBody = this.player.body;
-    const zoneBody = this.waterCoolerZone.body;
 
-    const overlap = Phaser.Geom.Intersects.RectangleToRectangle(
-      new Phaser.Geom.Rectangle(
-        playerBody.x, playerBody.y, playerBody.width, playerBody.height
-      ),
-      new Phaser.Geom.Rectangle(
-        zoneBody.x, zoneBody.y, zoneBody.width, zoneBody.height
-      )
-    );
+    for (const cooler of this.waterCoolers) {
+      if (!cooler.available) continue;
 
-    if (overlap) {
-      this.useWaterCooler();
+      const zoneBody = cooler.zone.body;
+      const overlap = Phaser.Geom.Intersects.RectangleToRectangle(
+        new Phaser.Geom.Rectangle(
+          playerBody.x, playerBody.y, playerBody.width, playerBody.height
+        ),
+        new Phaser.Geom.Rectangle(
+          zoneBody.x, zoneBody.y, zoneBody.width, zoneBody.height
+        )
+      );
+
+      if (overlap) {
+        this.useWaterCooler(cooler);
+        break; // Only use one per frame
+      }
     }
   }
 
-  /** Use the water cooler: reduce stress, restore stamina, start cooldown */
-  useWaterCooler() {
-    this.waterCoolerAvailable = false;
+  /** Use a specific water cooler: reduce stress, restore stamina, start cooldown */
+  useWaterCooler(cooler) {
+    cooler.available = false;
 
     // Apply stress relief
     const stressRelief = CONFIG.WATER_COOLER_STRESS_RELIEF;
@@ -665,34 +690,26 @@ export class GameScene extends Phaser.Scene {
     }
 
     // Dim sprite and hide glow/sparkle/speech during cooldown
-    if (this.waterCoolerSprite) {
-      this.waterCoolerSprite.setAlpha(0.5);
-    }
-    if (this.waterCoolerGlow) {
-      this.waterCoolerGlow.setVisible(false);
-    }
-    if (this.waterCoolerSparkle) {
-      this.waterCoolerSparkle.setVisible(false);
-    }
-    if (this._waterCoolerSpeechBubble) {
-      this._waterCoolerSpeechBubble.destroy();
-      this._waterCoolerSpeechBubble = null;
+    if (cooler.sprite) cooler.sprite.setAlpha(0.5);
+    if (cooler.glow) cooler.glow.setVisible(false);
+    if (cooler.sparkle) cooler.sparkle.setVisible(false);
+    if (cooler.speechBubble) {
+      cooler.speechBubble.destroy();
+      cooler.speechBubble = null;
     }
 
-    // Cooldown timer
-    this.waterCoolerCooldownTimer = this.time.delayedCall(
-      CONFIG.WATER_COOLER_COOLDOWN,
+    // Cooldown timer (Deep Breaths upgrade halves cooldown)
+    let cooldownMs = CONFIG.WATER_COOLER_COOLDOWN;
+    if (this.upgradeManager && this.upgradeManager.isActive('deep_breaths')) {
+      cooldownMs = Math.round(cooldownMs * 0.5);
+    }
+    cooler.cooldownTimer = this.time.delayedCall(
+      cooldownMs,
       () => {
-        this.waterCoolerAvailable = true;
-        if (this.waterCoolerSprite) {
-          this.waterCoolerSprite.setAlpha(1);
-        }
-        if (this.waterCoolerGlow) {
-          this.waterCoolerGlow.setVisible(true);
-        }
-        if (this.waterCoolerSparkle) {
-          this.waterCoolerSparkle.setVisible(true);
-        }
+        cooler.available = true;
+        if (cooler.sprite) cooler.sprite.setAlpha(1);
+        if (cooler.glow) cooler.glow.setVisible(true);
+        if (cooler.sparkle) cooler.sparkle.setVisible(true);
       }
     );
 
@@ -921,80 +938,141 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  /** Create vignette overlay: 4 edge rectangles for stress feedback */
-  createVignette() {
+  /** Create vignette glow overlay: single canvas texture with edge gradients */
+  createVignetteGlow() {
     const w = CONFIG.CANVAS_WIDTH;
     const h = CONFIG.CANVAS_HEIGHT;
-    const vw = CONFIG.EFFECTS.VIGNETTE_WIDTH;
+    const gw = CONFIG.EFFECTS.VIGNETTE_GLOW_WIDTH;
 
-    // Top, bottom, left, right edge overlays
-    this.vignetteTop = this.add.rectangle(w / 2, vw / 2, w, vw, 0xff0000, 0)
-      .setScrollFactor(0).setDepth(400);
-    this.vignetteBottom = this.add.rectangle(w / 2, h - vw / 2, w, vw, 0xff0000, 0)
-      .setScrollFactor(0).setDepth(400);
-    this.vignetteLeft = this.add.rectangle(vw / 2, h / 2, vw, h, 0xff0000, 0)
-      .setScrollFactor(0).setDepth(400);
-    this.vignetteRight = this.add.rectangle(w - vw / 2, h / 2, vw, h, 0xff0000, 0)
-      .setScrollFactor(0).setDepth(400);
+    // Remove stale texture if scene restarts
+    if (this.textures.exists('vignette-glow')) {
+      this.textures.remove('vignette-glow');
+    }
 
-    this.vignetteEdges = [this.vignetteTop, this.vignetteBottom, this.vignetteLeft, this.vignetteRight];
+    const canvasTex = this.textures.createCanvas('vignette-glow', w, h);
+    const ctx = canvasTex.context;
+
+    // Ensure canvas starts fully transparent
+    ctx.clearRect(0, 0, w, h);
+
+    // Top edge
+    let grad = ctx.createLinearGradient(0, 0, 0, gw);
+    grad.addColorStop(0, 'rgba(255,255,255,1)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, gw);
+
+    // Bottom edge
+    grad = ctx.createLinearGradient(0, h, 0, h - gw);
+    grad.addColorStop(0, 'rgba(255,255,255,1)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, h - gw, w, gw);
+
+    // Left edge
+    grad = ctx.createLinearGradient(0, 0, gw, 0);
+    grad.addColorStop(0, 'rgba(255,255,255,1)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, gw, h);
+
+    // Right edge
+    grad = ctx.createLinearGradient(w, 0, w - gw, 0);
+    grad.addColorStop(0, 'rgba(255,255,255,1)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(w - gw, 0, gw, h);
+
+    canvasTex.refresh();
+
+    this.vignetteImage = this.add.image(w / 2, h / 2, 'vignette-glow')
+      .setScrollFactor(0)
+      .setDepth(400)
+      .setAlpha(0);
+
     this.vignettePulseTween = null;
+    this._vignetteInRedZone = false;
   }
 
   /**
-   * Update vignette appearance based on stress threshold.
-   * @param {string|null} level - 'yellow', 'orange', 'red', or null (clear)
+   * Update vignette glow continuously based on stress percent.
+   * Called every stress-changed event (each frame stress moves).
+   * @param {number} percent - stress percentage 0-100
    */
-  updateVignette(level) {
+  updateVignetteGlow(percent) {
     const fx = CONFIG.EFFECTS;
 
-    // Stop any existing pulse tween
+    if (!this.vignetteImage) return;
+
+    // Below minimum: invisible
+    if (percent < fx.VIGNETTE_MIN_STRESS) {
+      this.vignetteImage.setAlpha(0);
+      this._stopVignettePulse();
+      return;
+    }
+
+    let tint, alpha;
+
+    if (percent < 40) {
+      // Green zone (5-39%): subtle green glow
+      const t = (percent - fx.VIGNETTE_MIN_STRESS) / (40 - fx.VIGNETTE_MIN_STRESS);
+      tint = 0x44aa44;
+      alpha = Phaser.Math.Linear(0, fx.VIGNETTE_GREEN_ALPHA_MAX, t);
+    } else if (percent < 65) {
+      // Yellow zone (40-64%): transition green -> yellow
+      const t = (percent - 40) / 25;
+      const green = Phaser.Display.Color.ValueToColor(0x44aa44);
+      const yellow = Phaser.Display.Color.ValueToColor(0xddcc00);
+      const blended = Phaser.Display.Color.Interpolate.ColorWithColor(green, yellow, 1, t);
+      tint = Phaser.Display.Color.GetColor(blended.r, blended.g, blended.b);
+      alpha = Phaser.Math.Linear(fx.VIGNETTE_GREEN_ALPHA_MAX, fx.VIGNETTE_YELLOW_ALPHA_MAX, t);
+    } else if (percent < 85) {
+      // Orange zone (65-84%): transition yellow -> orange
+      const t = (percent - 65) / 20;
+      const yellow = Phaser.Display.Color.ValueToColor(0xddcc00);
+      const orange = Phaser.Display.Color.ValueToColor(0xff8800);
+      const blended = Phaser.Display.Color.Interpolate.ColorWithColor(yellow, orange, 1, t);
+      tint = Phaser.Display.Color.GetColor(blended.r, blended.g, blended.b);
+      alpha = Phaser.Math.Linear(fx.VIGNETTE_YELLOW_ALPHA_MAX, fx.VIGNETTE_ORANGE_ALPHA_MAX, t);
+    } else {
+      // Red zone (85-100%): transition orange -> red
+      const t = Math.min((percent - 85) / 15, 1);
+      const orange = Phaser.Display.Color.ValueToColor(0xff8800);
+      const red = Phaser.Display.Color.ValueToColor(0xff2222);
+      const blended = Phaser.Display.Color.Interpolate.ColorWithColor(orange, red, 1, t);
+      tint = Phaser.Display.Color.GetColor(blended.r, blended.g, blended.b);
+      alpha = Phaser.Math.Linear(fx.VIGNETTE_RED_ALPHA_MIN, fx.VIGNETTE_RED_ALPHA_MAX, t);
+    }
+
+    this.vignetteImage.setTint(tint);
+
+    // Pulse effect in red zone
+    if (percent >= 85) {
+      if (!this._vignetteInRedZone) {
+        this._vignetteInRedZone = true;
+        this.vignettePulseTween = this.tweens.add({
+          targets: this.vignetteImage,
+          alpha: { from: fx.VIGNETTE_RED_ALPHA_MIN, to: fx.VIGNETTE_RED_ALPHA_MAX },
+          duration: fx.VIGNETTE_PULSE_DURATION,
+          yoyo: true,
+          repeat: -1,
+        });
+      }
+    } else {
+      if (this._vignetteInRedZone) {
+        this._stopVignettePulse();
+      }
+      this.vignetteImage.setAlpha(alpha);
+    }
+  }
+
+  /** Stop vignette pulse tween and reset red zone flag */
+  _stopVignettePulse() {
     if (this.vignettePulseTween) {
       this.vignettePulseTween.stop();
       this.vignettePulseTween = null;
     }
-
-    if (!level) {
-      // Clear vignette
-      for (const edge of this.vignetteEdges) {
-        edge.setAlpha(0);
-      }
-      return;
-    }
-
-    let color, alpha;
-    switch (level) {
-      case 'yellow':
-        color = 0xddcc00;
-        alpha = fx.VIGNETTE_YELLOW_ALPHA;
-        break;
-      case 'orange':
-        color = 0xff8800;
-        alpha = fx.VIGNETTE_ORANGE_ALPHA;
-        break;
-      case 'red':
-        color = 0xff2222;
-        alpha = fx.VIGNETTE_RED_ALPHA_MIN;
-        break;
-      default:
-        return;
-    }
-
-    for (const edge of this.vignetteEdges) {
-      edge.setFillStyle(color);
-      edge.setAlpha(alpha);
-    }
-
-    // Pulsing for red threshold
-    if (level === 'red') {
-      this.vignettePulseTween = this.tweens.add({
-        targets: this.vignetteEdges,
-        alpha: { from: fx.VIGNETTE_RED_ALPHA_MIN, to: fx.VIGNETTE_RED_ALPHA_MAX },
-        duration: fx.VIGNETTE_PULSE_DURATION,
-        yoyo: true,
-        repeat: -1,
-      });
-    }
+    this._vignetteInRedZone = false;
   }
 
   /** Wire particle and sound events to game events */
@@ -1063,9 +1141,14 @@ export class GameScene extends Phaser.Scene {
     };
     this.events.on('agent-disruption', this._onPolishDisruption);
 
-    // Stress threshold — vignette + warning sound
+    // Stress changed — continuous vignette glow update
+    this._onVignetteStressChanged = (data) => {
+      this.updateVignetteGlow(data.percent);
+    };
+    this.events.on('stress-changed', this._onVignetteStressChanged);
+
+    // Stress threshold — warning sound only
     this._onPolishStressThreshold = (data) => {
-      this.updateVignette(data.level);
       if (data.level) {
         this.soundManager.playStressWarning();
       }
@@ -1275,40 +1358,44 @@ export class GameScene extends Phaser.Scene {
       this.add.rectangle(cx, cy, 160, 36, 0x4169E1)
         .setInteractive({ useHandCursor: true })
     );
-    addPauseElement(this.add.text(cx, cy, isTouch ? 'Resume' : 'Resume (P)', {
+    const resumeText = addPauseElement(this.add.text(cx, cy, isTouch ? 'Resume' : 'Resume (P)', {
       fontSize: '16px', fontFamily: 'monospace', color: '#ffffff',
-    }).setOrigin(0.5));
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true }));
     resumeBg.on('pointerdown', () => this.togglePause());
+    resumeText.on('pointerdown', () => this.togglePause());
 
     // How to Play button
     const htpBg = addPauseElement(
       this.add.rectangle(cx, cy + 50, 160, 36, 0x555555)
         .setInteractive({ useHandCursor: true })
     );
-    addPauseElement(this.add.text(cx, cy + 50, isTouch ? 'How to Play' : 'How to Play (H)', {
+    const htpText = addPauseElement(this.add.text(cx, cy + 50, isTouch ? 'How to Play' : 'How to Play (H)', {
       fontSize: '16px', fontFamily: 'monospace', color: '#ffffff',
-    }).setOrigin(0.5));
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true }));
     htpBg.on('pointerdown', () => this.showHowToPlay());
+    htpText.on('pointerdown', () => this.showHowToPlay());
 
     // Restart button
     const restartBg = addPauseElement(
       this.add.rectangle(cx, cy + 100, 160, 36, 0x555555)
         .setInteractive({ useHandCursor: true })
     );
-    addPauseElement(this.add.text(cx, cy + 100, isTouch ? 'Restart' : 'Restart (R)', {
+    const restartText = addPauseElement(this.add.text(cx, cy + 100, isTouch ? 'Restart' : 'Restart (R)', {
       fontSize: '16px', fontFamily: 'monospace', color: '#ffffff',
-    }).setOrigin(0.5));
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true }));
     restartBg.on('pointerdown', () => this.pauseRestart());
+    restartText.on('pointerdown', () => this.pauseRestart());
 
     // Quit button
     const quitBg = addPauseElement(
       this.add.rectangle(cx, cy + 150, 160, 36, 0x555555)
         .setInteractive({ useHandCursor: true })
     );
-    addPauseElement(this.add.text(cx, cy + 150, isTouch ? 'Quit to Menu' : 'Quit to Menu (Q)', {
+    const quitText = addPauseElement(this.add.text(cx, cy + 150, isTouch ? 'Quit to Menu' : 'Quit to Menu (Q)', {
       fontSize: '16px', fontFamily: 'monospace', color: '#ffffff',
-    }).setOrigin(0.5));
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true }));
     quitBg.on('pointerdown', () => this.pauseQuit());
+    quitText.on('pointerdown', () => this.pauseQuit());
 
     // Sound toggle — tappable button on mobile, static hint on desktop
     if (isTouch) {
@@ -1414,6 +1501,8 @@ export class GameScene extends Phaser.Scene {
       tasksDelivered: this.taskManager.tasksDelivered,
       peakStress: this.stressManager.peakStress,
       totalXP: this.progressionManager.totalXP,
+      milestones: this.progressionManager.milestoneCount,
+      rangIPOBell: this.progressionManager.milestoneCount >= CONFIG.MILESTONE_IPO_BELL,
     };
 
     this.events.emit('game-over', { won, stats });
@@ -1485,12 +1574,17 @@ export class GameScene extends Phaser.Scene {
     this.events.off('task-expired', this._onPolishExpiry);
     this.events.off('level-up', this._onPolishLevelUp);
     this.events.off('agent-disruption', this._onPolishDisruption);
+    this.events.off('stress-changed', this._onVignetteStressChanged);
     this.events.off('stress-threshold', this._onPolishStressThreshold);
 
-    // Stop vignette pulse tween
-    if (this.vignettePulseTween) {
-      this.vignettePulseTween.stop();
-      this.vignettePulseTween = null;
+    // Stop vignette pulse tween and destroy glow image
+    this._stopVignettePulse();
+    if (this.vignetteImage) {
+      this.vignetteImage.destroy();
+      this.vignetteImage = null;
+    }
+    if (this.textures.exists('vignette-glow')) {
+      this.textures.remove('vignette-glow');
     }
 
     // Orientation handler cleanup

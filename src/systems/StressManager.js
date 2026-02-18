@@ -29,8 +29,8 @@ export class StressManager {
     /** @type {boolean} Whether stress-max has been emitted */
     this.gameOverEmitted = false;
 
-    /** @type {number} Cumulative passive decay bonus from post-CEO milestones */
-    this.milestoneDecayBonus = 0;
+    /** @type {Array<{time: number, amount: number}>} Rolling window of expiry stress events */
+    this._expiryStressLog = [];
   }
 
   /** Initialize stress system and register event listeners */
@@ -80,6 +80,12 @@ export class StressManager {
     const stressGain = rate * totalUndelivered * deltaSeconds;
     this.currentStress = clamp(this.currentStress + stressGain, 0, CONFIG.STRESS_MAX);
 
+    // Game over at 100% — check BEFORE passive decay so decay can't prevent it
+    if (this.currentStress >= CONFIG.STRESS_MAX && !this.gameOverEmitted) {
+      this.gameOverEmitted = true;
+      this.scene.events.emit('stress-max', {});
+    }
+
     // Passive stress decay when above threshold (safety net so stress doesn't snowball)
     if (this.currentStress > CONFIG.STRESS_PASSIVE_DECAY_THRESHOLD) {
       let decayRate = CONFIG.STRESS_PASSIVE_DECAY_RATE;
@@ -88,9 +94,6 @@ export class StressManager {
       if (this.scene.upgradeManager && this.scene.upgradeManager.isActive('stress_ball')) {
         decayRate += CONFIG.STRESS_BALL_DECAY_BONUS;
       }
-
-      // Post-CEO milestone decay bonus (stacks)
-      decayRate += this.milestoneDecayBonus;
 
       this.currentStress = clamp(
         this.currentStress - decayRate * deltaSeconds,
@@ -112,12 +115,6 @@ export class StressManager {
 
     // Check visual thresholds
     this.checkThresholds();
-
-    // Game over at 100%
-    if (this.currentStress >= CONFIG.STRESS_MAX && !this.gameOverEmitted) {
-      this.gameOverEmitted = true;
-      this.scene.events.emit('stress-max', {});
-    }
   }
 
   /**
@@ -128,8 +125,35 @@ export class StressManager {
   addInstantStress(amount, source) {
     if (CONFIG.DEBUG.STRESS_FREEZE || CONFIG.DEBUG.GOD_MODE) return;
 
-    this.currentStress = clamp(this.currentStress + amount, 0, CONFIG.STRESS_MAX);
-    console.debug(`[StressManager] +${amount}% stress from ${source} (now ${this.currentStress.toFixed(1)}%)`);
+    let effectiveAmount = amount;
+
+    // Cap expiry stress in a rolling window (prevents Reply-All burst wipes)
+    if (source === 'task-expiry') {
+      const now = this.scene.time.now;
+      const window = CONFIG.TASK_EXPIRY_STRESS_CAP_WINDOW;
+      const cap = CONFIG.TASK_EXPIRY_STRESS_CAP;
+
+      // Prune entries outside the window
+      this._expiryStressLog = this._expiryStressLog.filter((e) => now - e.time < window);
+
+      // Sum recent expiry stress
+      const recentTotal = this._expiryStressLog.reduce((sum, e) => sum + e.amount, 0);
+      const headroom = Math.max(0, cap - recentTotal);
+      effectiveAmount = Math.min(amount, headroom);
+
+      if (effectiveAmount > 0) {
+        this._expiryStressLog.push({ time: now, amount: effectiveAmount });
+      }
+
+      if (effectiveAmount < amount) {
+        console.debug(`[StressManager] expiry stress capped: ${amount}% -> ${effectiveAmount}% (${recentTotal.toFixed(1)}% in window)`);
+      }
+    }
+
+    if (effectiveAmount <= 0) return;
+
+    this.currentStress = clamp(this.currentStress + effectiveAmount, 0, CONFIG.STRESS_MAX);
+    console.debug(`[StressManager] +${effectiveAmount}% stress from ${source} (now ${this.currentStress.toFixed(1)}%)`);
   }
 
   /**
@@ -139,15 +163,6 @@ export class StressManager {
   relieveStress(amount) {
     this.currentStress = clamp(this.currentStress - amount, 0, CONFIG.STRESS_MAX);
     console.debug(`[StressManager] -${amount}% stress (now ${this.currentStress.toFixed(1)}%)`);
-  }
-
-  /**
-   * Add permanent passive stress decay bonus (from post-CEO milestones).
-   * @param {number} amount - Additional %/sec decay to add
-   */
-  addMilestoneDecay(amount) {
-    this.milestoneDecayBonus += amount;
-    console.debug(`[StressManager] milestone decay bonus now ${this.milestoneDecayBonus.toFixed(1)}%/sec`);
   }
 
   /** Check and emit visual threshold events */
