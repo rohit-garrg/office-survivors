@@ -116,9 +116,10 @@ The game deploys INTO the Astro website's `public/projects/office-survivors/` di
 - Config defaults (copy into gameConfig.js)
 
 **Important:** `upgrade-rebalance-v2.md` at project root documents all balance changes applied on top of the spec. When spec values and gameConfig.js disagree, gameConfig.js is the source of truth. Key changes:
-- Stress rates reduced ~30% from spec values
-- Stress relief on delivery significantly increased
-- Passive stress decay added (0.65%/sec above 50% stress)
+- Stress rates steepened for late game (Manager 0.065, Director 0.10, CEO 0.14)
+- Stress relief reverted to spec values (5%, 8%, 12%)
+- Passive stress decay reduced to 0.40%/sec above 50% (CEO stress actually threatens)
+- Stress Ball bonus reduced to 0.25%/sec (total 0.65%/sec above 50%)
 - All 15 upgrades overhauled to S or A tier (no filler). Many timed upgrades are now permanent.
-- XP curve reduced for late levels (5-9)
+- XP curve steepened (total 3000 XP to CEO); milestones cost 500/700/900, +0.1x XP each (cap 0.3x)
 - Pickup radius 36px, stamina regen 15/sec, spawn interval starts at 6000ms

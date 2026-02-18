@@ -268,9 +268,9 @@ export const PLAYER_START = { x: 20, y: 17 };
 |-------------|-------|------------|--------------|----------------------------|
 | 1-2 | **Intern** | Coffee runs, mail, photocopies, supply restocks | Baseline: single-stop delivery | 0.02%/sec |
 | 3-4 | **Associate** | Reports, spreadsheets, decks, data pulls | Spawn rate increases by 30% | 0.035%/sec |
-| 5-6 | **Manager** | Cross-functional briefs, escalations, roadmaps | **Multi-stop tasks unlock** (2 departments in sequence) | 0.055%/sec |
-| 7-8 | **Director** | Budget approvals, partnerships, strategy docs | Multi-stop tasks become more frequent (50% of spawns) | 0.08%/sec |
-| 9 | **CEO** | Board decks, M&A, IPO filings, reorgs | **Triple-stop tasks unlock** (3 departments) | 0.10%/sec |
+| 5-6 | **Manager** | Cross-functional briefs, escalations, roadmaps | **Multi-stop tasks unlock** (2 departments in sequence) | 0.065%/sec |
+| 7-8 | **Director** | Budget approvals, partnerships, strategy docs | Multi-stop tasks become more frequent (50% of spawns) | 0.10%/sec |
+| 9 | **CEO** | Board decks, M&A, IPO filings, reorgs | **Triple-stop tasks unlock** (3 departments) | 0.14%/sec |
 
 ### Leveling: Upgrades at EVERY Level, Promotions at Tier Transitions
 
@@ -296,16 +296,16 @@ A competent player delivers roughly 1 task every 6-8 seconds in early game (walk
 |-------|-----------|------------|-------------------------------|-----------|--------------|
 | 2 | 80 | 80 | 4 single-stop | 0:30 | 0:30 |
 | 3 | 120 | 200 | 6 | 0:45 | 1:15 |
-| 4 | 160 | 360 | 7 | 0:50 | 2:05 |
-| 5 | 200 | 560 | 7-8 (some multi-stop now) | 0:55 | 3:00 |
-| 6 | 260 | 820 | 5-6 multi-stop | 1:00 | 4:00 |
-| 7 | 440 | 1260 | 8-9 multi-stop | 1:30 | 5:30 |
-| 8 | 540 | 1800 | 10 multi-stop | 1:45 | 7:15 |
-| 9 | 660 | 2460 | 8-9 multi + some triple | 1:45 | 9:00 |
+| 4 | 180 | 380 | 7 | 0:50 | 2:05 |
+| 5 | 240 | 620 | 8-9 (some multi-stop now) | 1:00 | 3:05 |
+| 6 | 340 | 960 | 6-7 multi-stop | 1:10 | 4:15 |
+| 7 | 520 | 1480 | 9-10 multi-stop | 1:40 | 5:55 |
+| 8 | 680 | 2160 | 11-12 multi-stop | 1:50 | 7:45 |
+| 9 | 840 | 3000 | 10-11 multi + some triple | 1:50 | 9:35 |
 
-**Validation:** A skilled player hitting 70-80% delivery efficiency reaches CEO at ~7-8 min, leaving 2-3 min for post-CEO play. An average player reaches Director (level 7-8) and survives. A struggling player dies at Manager or Director. Late XP requirements increased from v3.1 originals to push CEO later and leave room for post-CEO milestones.
+**Validation:** A skilled player hitting 70-80% delivery efficiency reaches CEO at ~7.5-8 min, leaving 2-2.5 min for post-CEO play. An average player reaches Director (level 7-8) and survives. A struggling player dies at Manager or Director. Total XP to CEO is 3000 (steepened from earlier values to push CEO later and leave room for post-CEO milestones).
 
-**Post-CEO Milestones:** After reaching CEO (level 9), milestones trigger "Bonus Upgrade!" popups. The first milestone costs 300 XP, and each subsequent one costs 100 more (300, 400, 500...). Each milestone grants a permanent +0.5x XP multiplier bonus. Milestone #3 triggers a special "IPO Bell" celebration. If the upgrade pool is empty or all options are stale, the XP multiplier bonus is granted silently. This keeps the reward loop alive for the full 10 minutes.
+**Post-CEO Milestones:** After reaching CEO (level 9), milestones trigger "Bonus Upgrade!" popups. The first milestone costs 500 XP, and each subsequent one costs 200 more (500, 700, 900...). Each milestone grants a permanent +0.1x XP multiplier bonus (capped at +0.3x total). Milestone #3 triggers a special "IPO Bell" celebration. If the upgrade pool is empty or all options are stale, the XP multiplier bonus is granted silently. This keeps the reward loop alive for the full 10 minutes.
 
 ### Multi-Stop Task Mechanic (Precisely Defined)
 
@@ -477,41 +477,41 @@ stressChange = (sum of stress from each undelivered task) - (recent delivery rel
 |--------|------------|-------|
 | Undelivered task (Intern tier) | +0.02%/sec per task | Gentle early game |
 | Undelivered task (Associate tier) | +0.035%/sec per task | |
-| Undelivered task (Manager tier) | +0.055%/sec per task | Multi-stop: stress ticks for EACH remaining stop |
-| Undelivered task (Director tier) | +0.08%/sec per task | |
-| Undelivered task (CEO tier) | +0.10%/sec per task | |
+| Undelivered task (Manager tier) | +0.065%/sec per task | Multi-stop: stress ticks for EACH remaining stop |
+| Undelivered task (Director tier) | +0.10%/sec per task | |
+| Undelivered task (CEO tier) | +0.14%/sec per task | |
 | Task expires on map | +2% instant | Penalty for letting tasks rot |
 | Meeting Scheduler blocks dept | +3% instant | |
 | Pick up decoy task | +4% instant | Doubled to punish decoy mistakes |
 
 ### Passive Stress Decay (Rebalance v2)
 
-When stress exceeds 50%, a passive decay of -0.65%/sec kicks in as a safety net to prevent snowballing. The Stress Ball upgrade adds +0.35%/sec on top (total -1.0%/sec above 50%). Additionally, task expiry stress is capped at 20% within any 5-second rolling window, preventing Reply-All burst expiries from causing instant death spirals.
+When stress exceeds 50%, a passive decay of -0.40%/sec kicks in as a safety net to prevent snowballing. The Stress Ball upgrade adds +0.25%/sec on top (total -0.65%/sec above 50%). Additionally, task expiry stress is capped at 20% within any 5-second rolling window, preventing Reply-All burst expiries from causing instant death spirals.
 
 ### Stress Relief
 
 | Source | Amount | Notes |
 |--------|--------|-------|
-| Deliver single-stop task | -7% | Deliveries must feel rewarding |
-| Deliver multi-stop (complete) | -11% | Only on final delivery |
-| Deliver triple-stop (complete) | -16% | Big relief for big effort |
-| Stress Ball upgrade | Permanent -0.35%/sec passive decay | Stacks with base 0.65%/sec decay above 50% (total 1.0%/sec) |
+| Deliver single-stop task | -5% | Reverted to spec — late game needs real stress pressure |
+| Deliver multi-stop (complete) | -8% | Only on final delivery |
+| Deliver triple-stop (complete) | -12% | Big relief for big effort |
+| Stress Ball upgrade | Permanent -0.25%/sec passive decay | Stacks with base 0.40%/sec decay above 50% (total 0.65%/sec) |
 
 ### Stress Validation
 
 **Scenario: Competent player at minute 5, Manager tier.**
 
 Undelivered tasks on map: ~6 average (mix of intern/associate/manager tasks).
-Stress per second: (3 * 0.02) + (2 * 0.035) + (1 * 0.055) = 0.185%/sec.
+Stress per second: (3 * 0.02) + (2 * 0.035) + (1 * 0.065) = 0.195%/sec.
 Deliveries per minute: ~7 (mix of single and multi-stop).
-Stress relief per minute: (4 * 7%) + (3 * 11%) = 61%.
-Net stress per minute: (0.185 * 60) - 61 = 11.1 - 61 = **-49.9%** (very stable — room for chaos agents).
+Stress relief per minute: (4 * 5%) + (3 * 8%) = 44%.
+Net stress per minute: (0.195 * 60) - 44 = 11.7 - 44 = **-32.3%** (stable — room for chaos agents).
 
-With rebalanced base rates, a competent player stays well below 50% stress without upgrades. This is intentional: Phase 3 chaos agents will add significant stress pressure, and the base game needs breathing room to accommodate that.
+With steepened late-game rates and reduced relief, competent players still stay below 50% stress without upgrades, but the margin is tighter. Chaos agents and late tiers (Director 0.10, CEO 0.14) now provide real pressure.
 
 **Scenario: Struggling player at minute 5.**
 
-Undelivered tasks: ~12. Stress per second: ~0.37%/sec. They're delivering ~4 per minute = 28% relief. Net: (0.37 * 60) - 28 = -5.8%/min. Passive decay above 50% adds another safety net. They can recover if they focus. With chaos agents (Phase 3), this margin tightens significantly.
+Undelivered tasks: ~12. Stress per second: ~0.39%/sec. They're delivering ~4 per minute = 20% relief. Net: (0.39 * 60) - 20 = +3.4%/min (slowly rising). Passive decay above 50% adds -24%/min safety net (net -20.6%/min). They can recover if they focus. With chaos agents, this margin tightens significantly.
 
 ### Visual Feedback by Stress Level
 
@@ -556,7 +556,7 @@ When the player levels up, the 3 upgrade options are drawn from a **filtered poo
 | Extra Hands | +1 carry capacity | Permanent | "You've grown a third arm. Metaphorically." |
 | Speed Reader | +40% pickup radius + 40% delivery zone size on ALL depts | Permanent | "You can read a memo from across the room. And deliver from across the hall." |
 | Deep Breaths | Water cooler cooldown halved: 20s → 10s | Permanent | "In through the nose, out through the mouth. You got this." |
-| Stress Ball | Permanent -0.35%/sec passive stress decay (stacks with base 0.65%/sec decay) | Permanent | "Squeeze. Breathe. Repeat. Forever." |
+| Stress Ball | Permanent -0.25%/sec passive stress decay (stacks with base 0.40%/sec decay) | Permanent | "Squeeze. Breathe. Repeat. Forever." |
 | Noise-Cancelling AirPods | 70% freeze resistance + 50% slow resistance | Permanent | "Sorry, can't hear you. In a zone. Permanently." |
 | Executive Presence | On delivery: all agents slow 40% for 8s | Permanent | "Deliver a task and everyone backs off. Temporarily." |
 | Reply-All Filter | Decoy tasks glow red + navigation arrows on all tasks | Permanent | "Your spam filter leveled up. Now with navigation." |
@@ -571,7 +571,7 @@ When the player levels up, the 3 upgrade options are drawn from a **filtered poo
 **Key changes in Rebalance v2 (from spec v3.1 originals):**
 - Deep Breaths: NEW upgrade — halves water cooler cooldown (S-tier)
 - Speed Reader: now also expands ALL delivery zones by 40% (S-tier)
-- Stress Ball: changed from instant -15% to permanent -0.5%/sec passive decay (S-tier)
+- Stress Ball: changed from instant -15% to permanent -0.25%/sec passive decay (S-tier)
 - Noise-Cancelling AirPods: permanent 70% freeze resistance + 50% slow resistance, requires Micromanager spawned (A-tier)
 - Executive Presence: on delivery, 40% agent slowdown for 8s, requires 2+ agents spawned (A-tier)
 - Reply-All Filter: requires Reply-All Guy spawned, adds task navigation (A-tier)
@@ -996,22 +996,22 @@ export default {
   TASK_XP_MULTI_3_BASE: 80,        // +10 per tier above Director
 
   // === TASK STRESS RELIEF ===
-  TASK_RELIEF_SINGLE: 7,           // % (was 5)
-  TASK_RELIEF_MULTI_2: 11,          // % (was 8)
-  TASK_RELIEF_MULTI_3: 16,          // % (was 12)
+  TASK_RELIEF_SINGLE: 5,           // % (reverted to spec — late game needs real stress pressure)
+  TASK_RELIEF_MULTI_2: 8,            // % (reverted to spec)
+  TASK_RELIEF_MULTI_3: 12,           // % (reverted to spec)
 
   // === STRESS ===
   STRESS_MAX: 100,
   STRESS_RATE_INTERN: 0.02,        // %/sec per undelivered task (was 0.03)
   STRESS_RATE_ASSOCIATE: 0.035,     // was 0.05
-  STRESS_RATE_MANAGER: 0.055,       // was 0.08
-  STRESS_RATE_DIRECTOR: 0.08,       // was 0.11
-  STRESS_RATE_CEO: 0.10,            // was 0.15
+  STRESS_RATE_MANAGER: 0.065,       // was 0.055 — steeper late-game ramp
+  STRESS_RATE_DIRECTOR: 0.10,       // was 0.08
+  STRESS_RATE_CEO: 0.14,            // was 0.10
   STRESS_MEETING_BLOCK: 3,         // instant %
   STRESS_DECOY_PICKUP: 4,          // instant % (was 2 — doubled to punish decoy mistakes)
   STRESS_PASSIVE_DECAY_THRESHOLD: 50, // % stress above which passive decay kicks in
-  STRESS_PASSIVE_DECAY_RATE: 0.65,    // %/sec base passive decay (was 0.5 — raised so Stress Ball isn't mandatory)
-  STRESS_BALL_DECAY_BONUS: 0.35,     // extra %/sec from Stress Ball upgrade (was 0.5 — nice-to-have, not required)
+  STRESS_PASSIVE_DECAY_RATE: 0.40,    // %/sec base passive decay (was 0.65 — reduced so CEO stress actually threatens)
+  STRESS_BALL_DECAY_BONUS: 0.25,     // extra %/sec from Stress Ball upgrade (was 0.35)
   STRESS_VISUAL_YELLOW: 40,        // threshold %
   STRESS_VISUAL_ORANGE: 65,
   STRESS_VISUAL_RED: 85,
@@ -1127,7 +1127,7 @@ export default {
   ASSISTANT_STUCK_MOVE_THRESHOLD: 8,       // px — distance below which assistant is "stuck"
 
   // === PROGRESSION ===
-  XP_PER_LEVEL: [80, 120, 160, 200, 260, 440, 540, 660],  // (late game increased to push CEO to ~7-8 min)
+  XP_PER_LEVEL: [80, 120, 180, 240, 340, 520, 680, 840],  // steepened: total 3000 XP to CEO, ~7.5-8 min
   TIER_THRESHOLDS: {
     INTERN:    { minLevel: 1, maxLevel: 2 },
     ASSOCIATE: { minLevel: 3, maxLevel: 4 },
@@ -1136,9 +1136,10 @@ export default {
     CEO:       { minLevel: 9, maxLevel: 9 },
   },
   TIER_ORDER: ['INTERN', 'ASSOCIATE', 'MANAGER', 'DIRECTOR', 'CEO'],
-  POST_CEO_MILESTONE_XP_BASE: 300,           // first post-CEO milestone cost (was 400)
-  POST_CEO_MILESTONE_XP_INCREMENT: 100,       // each subsequent costs this much more (was 200)
-  MILESTONE_XP_MULTIPLIER_BONUS: 0.5,         // +0.5x XP multiplier per milestone (was: stress decay)
+  POST_CEO_MILESTONE_XP_BASE: 500,           // first post-CEO milestone cost (was 300 — slow the flood)
+  POST_CEO_MILESTONE_XP_INCREMENT: 200,       // each subsequent costs this much more (was 100)
+  MILESTONE_XP_MULTIPLIER_BONUS: 0.1,         // +0.1x XP multiplier per milestone (was 0.5 — kills feedback loop)
+  MILESTONE_XP_MULTIPLIER_CAP: 0.3,           // max cumulative bonus from milestones (caps at 1.3x)
   MILESTONE_IPO_BELL: 3,                       // milestone number that triggers IPO Bell celebration
 
   // === TIMER ===
