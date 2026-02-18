@@ -27,6 +27,8 @@ export default {
   TASK_WARNING_TIME: 45000, // ms before flashing
   TASK_EXPIRY_TIME: 60000, // ms before despawn
   TASK_EXPIRY_STRESS: 2, // % stress on expiry (was 3 — clusters punished too hard)
+  TASK_EXPIRY_STRESS_CAP: 20, // max % stress from expiry in any rolling window
+  TASK_EXPIRY_STRESS_CAP_WINDOW: 5000, // ms rolling window for expiry stress cap
 
   // === TASK XP ===
   TASK_XP_SINGLE_BASE: 20, // +5 per tier
@@ -34,22 +36,22 @@ export default {
   TASK_XP_MULTI_3_BASE: 80, // +10 per tier above Director
 
   // === TASK STRESS RELIEF ===
-  TASK_RELIEF_SINGLE: 7, // % (was 5 — deliveries must feel rewarding)
-  TASK_RELIEF_MULTI_2: 11, // % (was 8)
-  TASK_RELIEF_MULTI_3: 16, // % (was 12)
+  TASK_RELIEF_SINGLE: 5, // % (reverted to spec — late game needs real stress pressure)
+  TASK_RELIEF_MULTI_2: 8, // % (reverted to spec)
+  TASK_RELIEF_MULTI_3: 12, // % (reverted to spec)
 
   // === STRESS ===
   STRESS_MAX: 100,
   STRESS_RATE_INTERN: 0.02, // %/sec per undelivered task (was 0.03 — ~30% reduction)
   STRESS_RATE_ASSOCIATE: 0.035, // was 0.05
-  STRESS_RATE_MANAGER: 0.055, // was 0.08
-  STRESS_RATE_DIRECTOR: 0.08, // was 0.11
-  STRESS_RATE_CEO: 0.10, // was 0.15
+  STRESS_RATE_MANAGER: 0.065, // was 0.055 — steeper late-game ramp
+  STRESS_RATE_DIRECTOR: 0.10, // was 0.08
+  STRESS_RATE_CEO: 0.14, // was 0.10
   STRESS_MEETING_BLOCK: 3, // instant %
   STRESS_DECOY_PICKUP: 4, // instant % (was 2 — doubled to punish decoy mistakes)
   STRESS_PASSIVE_DECAY_THRESHOLD: 50, // % stress above which passive decay kicks in
-  STRESS_PASSIVE_DECAY_RATE: 0.5, // %/sec base passive decay (safety net)
-  STRESS_BALL_DECAY_BONUS: 1.0, // extra %/sec from Stress Ball upgrade (stacks with base)
+  STRESS_PASSIVE_DECAY_RATE: 0.40, // %/sec base passive decay (was 0.65 — reduced so CEO stress actually threatens)
+  STRESS_BALL_DECAY_BONUS: 0.25, // extra %/sec from Stress Ball upgrade (was 0.35)
   STRESS_VISUAL_YELLOW: 40, // threshold %
   STRESS_VISUAL_ORANGE: 65,
   STRESS_VISUAL_RED: 85,
@@ -72,6 +74,22 @@ export default {
   AGENT_WANDER_STUCK_TIME: 300,      // ms — force direction change after stuck this long
   AGENT_WANDER_SEEK_CHANCE: 0.35,    // probability of picking player-facing direction
 
+  // === CHAOS AGENTS: ENRAGE ===
+  // After enrageTime minutes since spawn, agents escalate once
+  ENRAGE_MICROMANAGER_TIME: 180000,       // 3 min after spawn
+  ENRAGE_MICROMANAGER_RANGE: 128,         // px (was 96)
+  ENRAGE_MICROMANAGER_STRESS_RATE: 0.5,   // %/sec (was 0.3)
+  ENRAGE_REPLYALL_TIME: 120000,           // 2 min after spawn
+  ENRAGE_REPLYALL_BURST: 6,              // tasks per burst (was 4)
+  ENRAGE_MEETING_TIME: 120000,            // 2 min after spawn
+  ENRAGE_MEETING_MAX_BLOCKS: 2,           // can block 2 depts simultaneously
+  ENRAGE_CHATTY_TIME: 90000,              // 90s after spawn
+  ENRAGE_CHATTY_FREEZE_DURATION: 3500,    // ms (was 2500)
+  ENRAGE_CHATTY_COOLDOWN: 4000,           // ms (was 6000)
+  ENRAGE_SLACKPINGER_TIME: 120000,        // 2 min after spawn
+  ENRAGE_SLACKPINGER_DECOY_INTERVAL: 3000, // ms (was 5000)
+  ENRAGE_SLACKPINGER_AURA_RANGE: 160,     // px (was 120)
+
   // === CHAOS AGENTS: MICROMANAGER ===
   MICROMANAGER_SPEED: 110,
   MICROMANAGER_SLOW_FACTOR: 0.6,
@@ -83,8 +101,10 @@ export default {
   REPLYALL_TASK_BURST: 4, // was 3 — more pressure per burst
   REPLYALL_COOLDOWN: 8000, // was 10000 — more frequent bursts
   REPLYALL_TASK_XP_MULT: 0.5, // 50% XP for Reply-All "junk mail" tasks
-  REPLYALL_TASK_EXPIRY_TIME: 30000, // ms — half normal expiry for junk mail
-  REPLYALL_TASK_EXPIRY_STRESS: 4, // % stress on junk mail expiry (doubled)
+  REPLYALL_TASK_EXPIRY_TIME: 20000, // ms — shorter window to decide (was 30000)
+  REPLYALL_TASK_EXPIRY_STRESS: 6, // % stress on junk mail expiry (was 4 — 24% total if full burst ignored)
+  REPLYALL_CHAIN_WINDOW: 10000,    // ms — deliver 2+ junk tasks within this window for full XP
+  REPLYALL_CHAIN_XP_MULT: 1.0,     // XP multiplier for 2nd+ junk task in chain (full XP)
   REPLYALL_OVERCAP: 2, // tasks allowed above TASK_MAX_ON_MAP
   REPLYALL_MIN_SPAWN_DIST: 160, // px from player (5 tiles)
   REPLYALL_PAUSE_DURATION: 1000, // ms pause at desk before bursting
@@ -102,6 +122,7 @@ export default {
   CHATTY_SPEED: 75,
   CHATTY_FREEZE_DURATION: 2500,
   CHATTY_COOLDOWN: 6000,
+  CHATTY_FREEZE_IMMUNITY_WINDOW: 2000, // ms — immunity after any freeze ends (prevents chain-freezing)
   CHATTY_FREEZE_OVERLAP_DIST: 24, // px — overlap distance to trigger freeze
   CHATTY_WALK_AWAY_DURATION: 2000, // ms to walk away after freezing
 
@@ -113,6 +134,15 @@ export default {
   SLACKPINGER_AURA_RANGE: 120, // px — stress aura radius
   SLACKPINGER_AURA_STRESS_RATE: 0.8, // %/sec stress while player in aura
 
+  // === PRESSURE BONUS ===
+  PRESSURE_AGENT_RANGE: 128,          // px — agent within this range during delivery
+  PRESSURE_AGENT_XP_BONUS: 0.5,       // +50% XP
+  PRESSURE_STRESS_THRESHOLD: 65,       // % stress above which bonus applies
+  PRESSURE_STRESS_XP_BONUS: 0.25,     // +25% XP
+  PRESSURE_HOT_ZONE_XP_BONUS: 0.75,   // +75% XP for recently-unblocked dept
+  PRESSURE_HOT_ZONE_DURATION: 30000,   // ms duration of hot zone after dept unblock
+  PRESSURE_MAX_MULTIPLIER: 3.0,        // cap total pressure multiplier
+
   // === UPGRADE TUNING ===
   CORNER_OFFICE_AUTO_DELIVER_RANGE: 80, // px — proximity auto-deliver for chosen dept
   FAST_TRACKER_STRESS_RELIEF: 3, // % stress relief per skip
@@ -120,7 +150,8 @@ export default {
   DEPT_FAVORITE_RELIEF_MULT: 2.0, // stress relief multiplier for favorite dept
   MEETING_BLOCKER_DURATION_MULT: 0.5, // halve meeting block durations
   MEETING_BLOCKER_BLOCKED_XP_MULT: 0.75, // 75% XP when delivering through blocks
-  EXECUTIVE_PRESENCE_SLOW_FACTOR: 0.7, // all chaos agents move 30% slower
+  EXECUTIVE_PRESENCE_SLOW_FACTOR: 0.6, // agents at 60% speed when EP active (delivery-triggered)
+  EXECUTIVE_PRESENCE_DURATION: 8000,    // ms duration of delivery-triggered agent slow
 
   // === ASSISTANT ===
   ASSISTANT_SPEED: 80,
@@ -131,12 +162,12 @@ export default {
   ASSISTANT_FETCH_TIMEOUT: 15000, // ms before giving up on fetch
   ASSISTANT_DELIVER_TIMEOUT: 20000, // ms before force-completing delivery
   ASSISTANT_SEEK_DELAY: 5000, // ms between task seek attempts
-  ASSISTANT_DELIVERY_INTERVAL: 45000, // ms between delivery cycles
+  ASSISTANT_DELIVERY_INTERVAL: 30000, // ms between delivery cycles (was 45000 — 45s too slow to feel useful)
   ASSISTANT_STUCK_CHECK_INTERVAL: 2000, // ms between stuck checks
   ASSISTANT_STUCK_MOVE_THRESHOLD: 8, // px — distance below which assistant is "stuck"
 
   // === PROGRESSION ===
-  XP_PER_LEVEL: [80, 120, 160, 200, 260, 440, 540, 660], // 8 entries for levels 2-9 (late game increased to push CEO to ~7-8 min)
+  XP_PER_LEVEL: [80, 120, 180, 240, 340, 520, 680, 840], // 8 entries for levels 2-9 (steepened: total 3000 XP to CEO, ~7.5-8 min)
   TIER_THRESHOLDS: {
     INTERN: { minLevel: 1, maxLevel: 2 },
     ASSOCIATE: { minLevel: 3, maxLevel: 4 },
@@ -145,9 +176,11 @@ export default {
     CEO: { minLevel: 9, maxLevel: 9 },
   },
   TIER_ORDER: ['INTERN', 'ASSOCIATE', 'MANAGER', 'DIRECTOR', 'CEO'],
-  POST_CEO_MILESTONE_XP_BASE: 400,       // first post-CEO milestone cost
-  POST_CEO_MILESTONE_XP_INCREMENT: 200,   // each subsequent milestone costs this much more
-  MILESTONE_STRESS_DECAY_BONUS: 0.3,      // permanent %/sec passive decay per milestone
+  POST_CEO_MILESTONE_XP_BASE: 500,       // first post-CEO milestone cost (was 300 — slow the flood)
+  POST_CEO_MILESTONE_XP_INCREMENT: 200,   // each subsequent costs this much more (was 100)
+  MILESTONE_XP_MULTIPLIER_BONUS: 0.1,     // +0.1x XP multiplier per milestone (was 0.5 — kills feedback loop)
+  MILESTONE_XP_MULTIPLIER_CAP: 0.3,       // max cumulative bonus from milestones (caps at 1.3x)
+  MILESTONE_IPO_BELL: 3,                   // milestone number that triggers IPO Bell celebration
 
   // === TIMER ===
   TIMER_WARNING_ORANGE: 120, // seconds remaining
@@ -188,8 +221,11 @@ export default {
   WATER_COOLER_STRESS_RELIEF: 8,     // % stress reduced on use
   WATER_COOLER_STAMINA_RESTORE: 20,  // stamina points restored on use
   WATER_COOLER_COOLDOWN: 20000,      // ms before it can be used again
-  WATER_COOLER_TILE_X: 37,           // tile position X (Break Room area)
-  WATER_COOLER_TILE_Y: 4,            // tile position Y (Break Room area)
+  WATER_COOLER_POSITIONS: [
+    { x: 37, y: 4 },   // Break Room area (upper-right)
+    { x: 20, y: 7 },   // Center-top corridor (high visibility)
+    { x: 20, y: 19 },  // Center-south corridor (covers bottom half of map)
+  ],
 
   // === SHARE ===
   SHARE_CARD_WIDTH: 1200,
@@ -245,13 +281,15 @@ export default {
     SHAKE_INTENSITY: 0.003,
     SHAKE_DURATION: 300, // ms
 
-    // Vignette
-    VIGNETTE_WIDTH: 60, // px edge width
-    VIGNETTE_YELLOW_ALPHA: 0.08,
-    VIGNETTE_ORANGE_ALPHA: 0.12,
-    VIGNETTE_RED_ALPHA_MIN: 0.10,
-    VIGNETTE_RED_ALPHA_MAX: 0.18,
-    VIGNETTE_PULSE_DURATION: 800, // ms per pulse cycle
+    // Vignette glow
+    VIGNETTE_GLOW_WIDTH: 100,           // px - how far gradient extends from edge
+    VIGNETTE_MIN_STRESS: 5,             // % - below this, no glow at all
+    VIGNETTE_GREEN_ALPHA_MAX: 0.06,     // max alpha in green zone (5-39%)
+    VIGNETTE_YELLOW_ALPHA_MAX: 0.10,    // max alpha in yellow zone (40-64%)
+    VIGNETTE_ORANGE_ALPHA_MAX: 0.15,    // max alpha in orange zone (65-84%)
+    VIGNETTE_RED_ALPHA_MIN: 0.15,       // red zone base alpha
+    VIGNETTE_RED_ALPHA_MAX: 0.25,       // red zone pulse peak
+    VIGNETTE_PULSE_DURATION: 800,       // ms per pulse cycle
 
     // Victory confetti
     VICTORY_CONFETTI_LIFETIME: 1500, // ms

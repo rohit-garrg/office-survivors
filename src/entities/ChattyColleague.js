@@ -58,6 +58,24 @@ export class ChattyColleague extends ChaosAgent {
 
     /** @type {boolean} Whether currently walking away after freeze */
     this._walkingAway = false;
+
+    // Enrage: 90s after spawn — longer freeze + shorter cooldown
+    this.enrageTime = CONFIG.ENRAGE_CHATTY_TIME;
+  }
+
+  /** Escalate stats on enrage */
+  onEnrage() {
+    console.debug('[ChattyColleague] enraged: freeze + cooldown escalated');
+  }
+
+  /** Get current freeze duration (enraged = longer) */
+  getFreezeDuration() {
+    return this.isEnraged ? CONFIG.ENRAGE_CHATTY_FREEZE_DURATION : CONFIG.CHATTY_FREEZE_DURATION;
+  }
+
+  /** Get current cooldown (enraged = shorter) */
+  getCooldown() {
+    return this.isEnraged ? CONFIG.ENRAGE_CHATTY_COOLDOWN : CONFIG.CHATTY_COOLDOWN;
   }
 
   /** Wander randomly, check for player overlap */
@@ -181,7 +199,7 @@ export class ChattyColleague extends ChaosAgent {
   /** Check if player is overlapping this agent */
   checkPlayerOverlap() {
     const player = this.scene.player;
-    if (!player || player.isFrozen) return;
+    if (!player || player.isFrozen || player.freezeImmune) return;
 
     const dist = Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y);
     // Overlap = within combined half-sizes
@@ -190,23 +208,24 @@ export class ChattyColleague extends ChaosAgent {
     }
   }
 
-  /** Freeze the player and show freeze bubble */
+  /** Freeze the player and show freeze bubble (resistance-based with AirPods) */
   freezePlayer() {
     const player = this.scene.player;
     if (!player) return;
 
-    // AirPods: immune to freeze
-    if (player.isImmuneToSlow()) {
-      console.debug('[ChattyColleague] freeze blocked by AirPods');
-      // Still go on cooldown
-      this._onCooldown = true;
-      this._cooldownTimer = CONFIG.CHATTY_COOLDOWN;
-      this.walkAway();
-      return;
-    }
+    // Use enrage-aware freeze duration
+    const baseDuration = this.getFreezeDuration();
 
-    // Freeze the player
-    player.freeze(CONFIG.CHATTY_FREEZE_DURATION);
+    // Player.freeze() handles resistance internally — always call it
+    player.freeze(baseDuration);
+
+    // Calculate effective duration for chatty's own timers (bubble, walk-away)
+    let effectiveDuration = baseDuration;
+    const resistance = player.getMovementResistance();
+    if (resistance) {
+      effectiveDuration = Math.round(baseDuration * (1 - resistance.freezeReduction));
+      if (effectiveDuration < 100) effectiveDuration = 100;
+    }
 
     // Stop chatty while talking
     if (this.body) this.body.setVelocity(0, 0);
@@ -220,17 +239,17 @@ export class ChattyColleague extends ChaosAgent {
       position: { x: this.x, y: this.y },
     });
 
-    console.debug('[ChattyColleague] froze player');
+    console.debug(`[ChattyColleague] froze player for ${effectiveDuration}ms`);
 
-    // After freeze ends, walk away
-    this.scene.time.delayedCall(CONFIG.CHATTY_FREEZE_DURATION, () => {
+    // After freeze ends, walk away (use effective duration)
+    this.scene.time.delayedCall(effectiveDuration, () => {
       this.hideFreezeBubble();
       this.walkAway();
     });
 
     // Start cooldown
     this._onCooldown = true;
-    this._cooldownTimer = CONFIG.CHATTY_COOLDOWN;
+    this._cooldownTimer = this.getCooldown();
   }
 
   /** Walk away from player (180-degree turn) */
@@ -260,14 +279,17 @@ export class ChattyColleague extends ChaosAgent {
 
     const text = this.getRandomSpeech();
 
-    // White rounded rect background + text
-    const bg = this.scene.add.rectangle(0, 0, text.length * 6 + 16, 22, 0xffffff, 0.95)
-      .setStrokeStyle(1, 0x333333);
+    // Create label first so we can measure its width for the background
     const label = this.scene.add.text(0, 0, text, {
-      fontSize: '10px',
+      fontSize: '12px',
       fontFamily: 'monospace',
       color: '#333333',
+      resolution: 3,
     }).setOrigin(0.5);
+
+    // White rounded rect background sized to actual text width
+    const bg = this.scene.add.rectangle(0, 0, label.width + 16, label.height + 10, 0xffffff, 0.95)
+      .setStrokeStyle(1, 0x333333);
 
     this._freezeBubble = this.scene.add.container(this.x, this.y - 30, [bg, label])
       .setDepth(25);

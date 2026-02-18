@@ -103,11 +103,19 @@ export class HowToPlayScene extends Phaser.Scene {
     // Container for page-specific elements (destroyed on page change)
     this.pageElements = [];
 
+    // Track whether we're on the last page (for next arrow behavior)
+    this._isLastPage = false;
+
     // Show first page
     this.showPage(0);
   }
 
   changePage(dir) {
+    // If on last page and pressing next, close the scene
+    if (dir === 1 && this._isLastPage) {
+      this.close();
+      return;
+    }
     const next = this.currentPage + dir;
     if (next < 0 || next >= PAGE_COUNT) return;
     this.showPage(next);
@@ -129,7 +137,15 @@ export class HowToPlayScene extends Phaser.Scene {
 
     // Update arrows visibility
     this.prevArrow.setVisible(index > 0);
-    this.nextArrow.setVisible(index < PAGE_COUNT - 1);
+    this._isLastPage = index === PAGE_COUNT - 1;
+    if (this._isLastPage) {
+      // Show a contextual button on the last page
+      this.nextArrow.setVisible(true);
+      this.nextArrow.setText(this.source === 'title' ? 'START GAME >' : 'DONE');
+    } else {
+      this.nextArrow.setVisible(index < PAGE_COUNT - 1);
+      this.nextArrow.setText('NEXT >');
+    }
 
     // Page titles
     const titles = ['The Mission', 'Tasks & Departments', 'Stress & Stamina', 'Chaos Agents', 'Career & Upgrades'];
@@ -413,7 +429,7 @@ export class HowToPlayScene extends Phaser.Scene {
       'Each level-up lets you pick 1 of 3 upgrades.',
       'Upgrades can be permanent or timed boosts.',
       'Promotions (new tier) unlock stronger upgrades.',
-      'After reaching CEO, milestones grant bonus upgrades.',
+      'After reaching CEO, milestones grant XP multipliers + bonus upgrades.',
     ];
     for (const line of upgradeInfo) {
       this.addPageText(left, y, '  ' + line, { fontSize: '11px', color: '#aaaacc' });

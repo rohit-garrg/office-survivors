@@ -7,13 +7,13 @@ import { TutorialManager } from '../systems/TutorialManager.js';
 import { DEPARTMENT_COLORS } from '../config/mapData.js';
 import { isTouchDevice } from '../utils/helpers.js';
 
-/** Descriptions shown on first spawn of each agent type */
+/** Descriptions shown on first spawn of each agent type (toast + info panel) */
 const AGENT_INTRO_DESCRIPTIONS = {
-  micromanager: 'Follows you. Slows you within range.',
-  reply_all_guy: 'Goes to desks. Floods the floor with tasks.',
-  meeting_scheduler: 'Blocks departments with meetings.',
-  chatty_colleague: 'Wanders around. Freezes you on contact.',
-  slack_pinger: 'Spawns fake tasks that waste your time.',
+  micromanager: 'Follows you around and slows you by 40% when nearby.',
+  reply_all_guy: 'Walks to desks and floods the floor with extra tasks.',
+  meeting_scheduler: 'Blocks departments so you can\'t deliver there.',
+  chatty_colleague: 'Wanders the office and freezes you for 2.5s on contact.',
+  slack_pinger: 'Spawns fake tasks that waste a carry slot.',
 };
 
 export class UIScene extends Phaser.Scene {
@@ -126,10 +126,19 @@ export class UIScene extends Phaser.Scene {
     this._onMilestoneBonus = (data) => {
       const player = gameScene.player;
       if (player) {
-        this.gameFloatingText.show(
-          `CEO Perk: -0.3%/s Stress`,
-          player.x, player.y, '#FFD700'
-        );
+        const multText = data.xpMultiplier ? `${data.xpMultiplier.toFixed(1)}x` : '+XP';
+        if (data.isIPOBell) {
+          this.gameFloatingText.show('IPO BELL!', player.x, player.y - 20, '#FFD700');
+          this.gameFloatingText.show(
+            `CEO Perk: ${multText} XP Multiplier`,
+            player.x, player.y, '#FFD700'
+          );
+        } else {
+          this.gameFloatingText.show(
+            `CEO Perk: ${multText} XP Multiplier`,
+            player.x, player.y, '#FFD700'
+          );
+        }
       }
     };
 
@@ -141,18 +150,14 @@ export class UIScene extends Phaser.Scene {
           player.x, player.y, '#ff4444'
         );
 
-        // First-spawn intro: show yellow description line below the title
+        // First-spawn intro: show toast with name + description
         const agentType = data.type;
         if (agentType && !this._introducedAgents.has(agentType) && AGENT_INTRO_DESCRIPTIONS[agentType]) {
           this._introducedAgents.add(agentType);
-          this.scene.get('GameScene').time.delayedCall(300, () => {
-            if (player) {
-              this.gameFloatingText.show(
-                AGENT_INTRO_DESCRIPTIONS[agentType],
-                player.x, player.y + 20, '#ffdd00'
-              );
-            }
-          });
+          this.toast.show(
+            `${data.name}: ${AGENT_INTRO_DESCRIPTIONS[agentType]}`,
+            { duration: 5000 }
+          );
         }
       }
     };
@@ -200,6 +205,16 @@ export class UIScene extends Phaser.Scene {
     this._onDeptUnblocked = (data) => {
       this.hud.hideDeptBlocked(data.department);
     };
+
+    // === Pressure bonus floating text ===
+    this._onPressureBonus = (data) => {
+      const player = gameScene.player;
+      if (player && data.reasons && data.reasons.length > 0) {
+        const text = data.reasons.join(' + ') + ` (${data.multiplier.toFixed(1)}x)`;
+        this.gameFloatingText.show(text, player.x, player.y - 20, '#ff9900');
+      }
+    };
+    gameScene.events.on('pressure-bonus', this._onPressureBonus);
 
     // === Water cooler floating text feedback ===
     this._onWaterCoolerUsed = (data) => {
@@ -329,6 +344,7 @@ export class UIScene extends Phaser.Scene {
       gameScene.events.off('department-blocked', this._onDeptBlocked);
       gameScene.events.off('department-unblocked', this._onDeptUnblocked);
       gameScene.events.off('water-cooler-used', this._onWaterCoolerUsed);
+      gameScene.events.off('pressure-bonus', this._onPressureBonus);
 
       // Sprint hint cleanup
       gameScene.events.off('stress-changed', this._onStressForHint);

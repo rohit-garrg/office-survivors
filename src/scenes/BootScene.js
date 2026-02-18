@@ -118,15 +118,6 @@ export class BootScene extends Phaser.Scene {
     playerGfx.generateTexture('player', 32, 32);
     playerGfx.destroy();
 
-    // Department zone textures (subtle floor tint, no per-tile border)
-    for (const dept of DEPARTMENTS) {
-      const gfx = this.make.graphics({ add: false });
-      const color = parseInt(dept.color.replace('#', ''), 16);
-      gfx.fillStyle(color, 0.18);
-      gfx.fillRect(0, 0, 32, 32);
-      gfx.generateTexture(`zone_${dept.id}`, 32, 32);
-      gfx.destroy();
-    }
 
     // --- Task document icons (16x16) ---
     const deptIds = Object.keys(DEPARTMENT_COLORS);

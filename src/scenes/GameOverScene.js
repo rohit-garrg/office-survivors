@@ -99,6 +99,12 @@ export class GameOverScene extends Phaser.Scene {
       `Peak Stress: ${Math.floor(stats.peakStress || 0)}%`,
       `Total XP: ${stats.totalXP || 0}`,
     ];
+    if (stats.milestones > 0) {
+      lines.push(`CEO Milestones: ${stats.milestones}`);
+    }
+    if (stats.rangIPOBell) {
+      lines.push('Rang the IPO Bell!');
+    }
 
     lines.forEach((line, i) => {
       this.add.text(cx, startY + i * 26, line, {

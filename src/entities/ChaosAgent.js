@@ -66,6 +66,17 @@ export class ChaosAgent extends Phaser.GameObjects.Sprite {
     /** @type {number} Consecutive stuck attempts (resets on successful movement or target change) */
     this._stuckRetries = 0;
 
+    // === Enrage state ===
+
+    /** @type {boolean} Whether this agent has enraged */
+    this.isEnraged = false;
+
+    /** @type {number} Time since activation in ms (for enrage timer) */
+    this._aliveTimer = 0;
+
+    /** @type {number} Enrage threshold in ms (set by subclasses, 0 = never enrage) */
+    this.enrageTime = 0;
+
     // === Education properties (set by subclasses) ===
 
     /** @type {string} Display name shown below agent */
@@ -132,6 +143,14 @@ export class ChaosAgent extends Phaser.GameObjects.Sprite {
    */
   update(time, delta) {
     if (!this.isActive) return;
+
+    // Enrage timer
+    if (!this.isEnraged && this.enrageTime > 0) {
+      this._aliveTimer += delta;
+      if (this._aliveTimer >= this.enrageTime) {
+        this.enrage();
+      }
+    }
 
     // Handle idle wait (stuck recovery)
     if (this._isIdling) {
@@ -334,15 +353,71 @@ export class ChaosAgent extends Phaser.GameObjects.Sprite {
   }
 
   /**
-   * Get effective speed factoring in Executive Presence upgrade.
+   * Get effective speed factoring in Executive Presence (delivery-triggered slow).
    * @returns {number} Speed in px/sec
    */
   getEffectiveSpeed() {
     let speed = this.speed;
-    if (this.scene.upgradeManager && this.scene.upgradeManager.isActive('executive_presence')) {
+    if (this.scene.upgradeManager && this.scene.upgradeManager.executivePresenceActive) {
       speed *= CONFIG.EXECUTIVE_PRESENCE_SLOW_FACTOR;
     }
     return speed;
+  }
+
+  /**
+   * Trigger enrage state. Base class handles visual feedback.
+   * Subclasses override onEnrage() to apply specific stat escalation.
+   */
+  enrage() {
+    if (this.isEnraged) return;
+    this.isEnraged = true;
+    console.log(`[ChaosAgent:${this.agentType}] ENRAGED!`);
+
+    // Visual: red flash + angry speech bubble
+    this.setTint(0xff4444);
+    this.scene.time.delayedCall(600, () => {
+      if (this.isActive) this.clearTint();
+    });
+
+    // Show enrage speech bubble
+    this.hideAgentSpeech();
+    const label = this.scene.add.text(0, 0, "That's IT!", {
+      fontSize: '13px',
+      fontFamily: 'monospace',
+      color: '#ff0000',
+      fontStyle: 'bold',
+      resolution: 3,
+    }).setOrigin(0.5);
+    const bg = this.scene.add.rectangle(0, 0, label.width + 14, label.height + 10, 0xffffff, 0.95)
+      .setStrokeStyle(2, 0xff0000);
+    const bubble = this.scene.add.container(this.x, this.y - 30, [bg, label]).setDepth(25);
+    this.scene.time.delayedCall(2000, () => {
+      if (bubble && bubble.scene) bubble.destroy();
+    });
+
+    // Emit event for UI feedback
+    this.scene.events.emit('agent-disruption', {
+      type: this.agentType,
+      effect: 'enraged',
+      position: { x: this.x, y: this.y },
+    });
+
+    // Update name label with enraged indicator
+    if (this._nameLabel) {
+      this._nameLabel.setText(`${this.displayName} [!]`);
+      this._nameLabel.setColor('#ff4444');
+    }
+
+    // Subclass-specific escalation
+    this.onEnrage();
+  }
+
+  /**
+   * Override in subclasses to apply specific enrage stat changes.
+   * Called by enrage() after visual feedback.
+   */
+  onEnrage() {
+    // Default: no additional behavior
   }
 
   /**
@@ -381,11 +456,12 @@ export class ChaosAgent extends Phaser.GameObjects.Sprite {
   createNameLabel() {
     if (!this.displayName) return;
     this._nameLabel = this.scene.add.text(this.x, this.y + 16, this.displayName, {
-      fontSize: '8px',
+      fontSize: '10px',
       fontFamily: 'monospace',
       color: '#ffffff',
       stroke: '#000000',
       strokeThickness: 2,
+      resolution: 3,
     }).setOrigin(0.5, 0).setDepth(11);
   }
 
@@ -401,7 +477,7 @@ export class ChaosAgent extends Phaser.GameObjects.Sprite {
   // Education: Click-to-Inspect
   // ========================
 
-  /** Show info panel with behavior description above agent */
+  /** Show info panel with agent name, description, and dismiss hint above agent */
   showInfoPanel() {
     if (!this.description) return;
     this.hideInfoPanel();
@@ -409,29 +485,55 @@ export class ChaosAgent extends Phaser.GameObjects.Sprite {
     // Hide speech bubble to avoid overlap
     this.hideAgentSpeech();
 
-    const padding = 8;
-    const maxWidth = 180;
+    const padding = 10;
+    const maxWidth = 240;
+    const innerWidth = maxWidth - padding * 2;
 
-    const label = this.scene.add.text(0, 0, this.description, {
-      fontSize: '10px',
+    // Agent name header (colored, bold)
+    const nameLabel = this.scene.add.text(0, 0, this.displayName, {
+      fontSize: '14px',
       fontFamily: 'monospace',
-      color: '#ffffff',
-      wordWrap: { width: maxWidth - padding * 2 },
+      color: '#FFD700',
+      fontStyle: 'bold',
+      resolution: 3,
     }).setOrigin(0.5);
 
-    const bgWidth = Math.min(maxWidth, label.width + padding * 2);
-    const bgHeight = label.height + padding * 2;
+    // Description body (white, word-wrapped)
+    const descLabel = this.scene.add.text(0, 0, this.description, {
+      fontSize: '12px',
+      fontFamily: 'monospace',
+      color: '#ffffff',
+      wordWrap: { width: innerWidth },
+      resolution: 3,
+    }).setOrigin(0.5);
 
-    const bg = this.scene.add.rectangle(0, 0, bgWidth, bgHeight, 0x000000, 0.85)
+    // Dismiss hint (gray)
+    const hintLabel = this.scene.add.text(0, 0, 'Tap to dismiss', {
+      fontSize: '11px',
+      fontFamily: 'monospace',
+      color: '#888888',
+      resolution: 3,
+    }).setOrigin(0.5);
+
+    // Calculate layout: stack name, desc, hint vertically
+    const totalHeight = nameLabel.height + 4 + descLabel.height + 4 + hintLabel.height + padding * 2;
+    const bgWidth = Math.min(maxWidth, Math.max(nameLabel.width, descLabel.width, hintLabel.width) + padding * 2);
+
+    // Position elements vertically centered in the panel
+    const startY = -totalHeight / 2 + padding;
+    nameLabel.setPosition(0, startY + nameLabel.height / 2);
+    descLabel.setPosition(0, startY + nameLabel.height + 4 + descLabel.height / 2);
+    hintLabel.setPosition(0, startY + nameLabel.height + 4 + descLabel.height + 4 + hintLabel.height / 2);
+
+    const bg = this.scene.add.rectangle(0, 0, bgWidth, totalHeight, 0x000000, 0.9)
       .setStrokeStyle(1, 0xffffff);
 
-    this._infoPanel = this.scene.add.container(this.x, this.y - 36, [bg, label])
-      .setDepth(30);
+    // Make bg interactive for click-to-dismiss
+    bg.setInteractive({ useHandCursor: true });
+    bg.on('pointerdown', () => this.hideInfoPanel());
 
-    // Auto-dismiss after configured duration
-    this._infoPanelTimer = this.scene.time.delayedCall(CONFIG.AGENT_INFO_PANEL_DURATION, () => {
-      this.hideInfoPanel();
-    });
+    this._infoPanel = this.scene.add.container(this.x, this.y - 36, [bg, nameLabel, descLabel, hintLabel])
+      .setDepth(30);
   }
 
   /** Destroy info panel */
@@ -439,10 +541,6 @@ export class ChaosAgent extends Phaser.GameObjects.Sprite {
     if (this._infoPanel) {
       this._infoPanel.destroy();
       this._infoPanel = null;
-    }
-    if (this._infoPanelTimer) {
-      this._infoPanelTimer.destroy();
-      this._infoPanelTimer = null;
     }
   }
 
@@ -458,9 +556,10 @@ export class ChaosAgent extends Phaser.GameObjects.Sprite {
     const text = randomFrom(this.speechLines);
 
     const label = this.scene.add.text(0, 0, text, {
-      fontSize: '9px',
+      fontSize: '11px',
       fontFamily: 'monospace',
       color: '#333333',
+      resolution: 3,
     }).setOrigin(0.5);
 
     const bgWidth = label.width + 14;
@@ -554,6 +653,8 @@ export class ChaosAgent extends Phaser.GameObjects.Sprite {
     if (this.description) {
       this.setInteractive({ useHandCursor: true });
       this.on('pointerdown', this._onPointerDown, this);
+      this.on('pointerover', this._onPointerOver, this);
+      this.on('pointerout', this._onPointerOut, this);
     }
 
     console.log(`[ChaosAgent:${this.agentType}] activated at (${Math.round(x)}, ${Math.round(y)})`);
@@ -562,6 +663,16 @@ export class ChaosAgent extends Phaser.GameObjects.Sprite {
   /** Handler for click-to-inspect */
   _onPointerDown() {
     this.showInfoPanel();
+  }
+
+  /** Handler for hover highlight */
+  _onPointerOver() {
+    this.setTint(0xffffcc);
+  }
+
+  /** Handler for hover clear */
+  _onPointerOut() {
+    this.clearTint();
   }
 
   /** Deactivate this agent (remove from play) */
@@ -583,6 +694,9 @@ export class ChaosAgent extends Phaser.GameObjects.Sprite {
 
     if (this.description) {
       this.off('pointerdown', this._onPointerDown, this);
+      this.off('pointerover', this._onPointerOver, this);
+      this.off('pointerout', this._onPointerOut, this);
+      this.clearTint();
       this.removeInteractive();
     }
 

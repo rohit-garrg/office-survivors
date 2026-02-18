@@ -23,13 +23,13 @@ export const AGENT_SCHEDULE = [
     persistent: true,
   },
   {
-    type: 'reply_all_guy',
-    name: 'The Reply-All Guy',
-    timeGate: 180, // 3:00
-    levelGate: 3,
+    type: 'chatty_colleague',
+    name: 'The Chatty Colleague',
+    timeGate: 120, // 2:00 (swapped: was 5:30 — early "oh no" moment)
+    levelGate: 2,
     initialCount: 1,
     maxCount: 2,
-    maxCountTime: 420, // 7:00
+    maxCountTime: 480, // 8:00
     persistent: true,
   },
   {
@@ -43,13 +43,13 @@ export const AGENT_SCHEDULE = [
     persistent: true,
   },
   {
-    type: 'chatty_colleague',
-    name: 'The Chatty Colleague',
-    timeGate: 330, // 5:30
-    levelGate: 5,
+    type: 'reply_all_guy',
+    name: 'The Reply-All Guy',
+    timeGate: 270, // 4:30 (swapped: was 3:00 — burst-spawn is harder to grasp)
+    levelGate: 4,
     initialCount: 1,
     maxCount: 2,
-    maxCountTime: 480, // 8:00
+    maxCountTime: 420, // 7:00
     persistent: true,
   },
   {

@@ -54,6 +54,9 @@ export class Player extends Phaser.GameObjects.Sprite {
     /** @type {boolean} Whether frozen by Chatty Colleague */
     this.isFrozen = false;
 
+    /** @type {boolean} Whether in post-freeze immunity window */
+    this.freezeImmune = false;
+
     /** @type {number} Current move speed */
     this.currentSpeed = CONFIG.PLAYER_SPEED;
 
@@ -439,13 +442,27 @@ export class Player extends Phaser.GameObjects.Sprite {
 
   /**
    * Freeze player for a duration (Chatty Colleague effect).
-   * Blocked by Noise-Cancelling AirPods (movement_immunity).
+   * AirPods reduces freeze duration by freezeReduction% instead of full immunity.
    * @param {number} duration - ms
    */
   freeze(duration) {
-    // AirPods: immune to all movement impairment
-    if (this.scene.upgradeManager && this.scene.upgradeManager.isActive('noise_cancelling_airpods')) {
-      console.debug('[Player] freeze blocked by Noise-Cancelling AirPods');
+    // Chain-freeze protection: skip if in immunity window
+    if (this.freezeImmune) {
+      console.debug('[Player] freeze blocked by immunity window');
+      return;
+    }
+
+    // AirPods: reduce freeze duration (resistance model)
+    let effectiveDuration = duration;
+    const resistance = this.getMovementResistance();
+    if (resistance) {
+      effectiveDuration = Math.round(duration * (1 - resistance.freezeReduction));
+      console.debug(`[Player] freeze reduced by AirPods: ${duration}ms -> ${effectiveDuration}ms`);
+    }
+
+    // Skip freeze if reduced below 100ms (negligible)
+    if (effectiveDuration < 100) {
+      console.debug('[Player] freeze too short after resistance, skipping');
       return;
     }
 
@@ -453,20 +470,37 @@ export class Player extends Phaser.GameObjects.Sprite {
     this.body.setVelocity(0, 0);
     this.setTint(0x88aaff); // Visual freeze indicator
 
-    this.scene.time.delayedCall(duration, () => {
+    this.scene.time.delayedCall(effectiveDuration, () => {
       this.isFrozen = false;
       this.clearTint();
+
+      // Grant immunity window to prevent chain-freezing
+      this.freezeImmune = true;
+      this.scene.time.delayedCall(CONFIG.CHATTY_FREEZE_IMMUNITY_WINDOW, () => {
+        this.freezeImmune = false;
+      });
     });
   }
 
   /**
-   * Check if player is immune to speed debuffs (Noise-Cancelling AirPods).
-   * Called by Micromanager slow effect.
-   * @returns {boolean}
+   * Get movement resistance values from AirPods upgrade.
+   * @returns {{freezeReduction: number, slowResistance: number}|null}
    */
-  isImmuneToSlow() {
-    return this.scene.upgradeManager &&
-      this.scene.upgradeManager.isActive('noise_cancelling_airpods');
+  getMovementResistance() {
+    if (!this.scene.upgradeManager || !this.scene.upgradeManager.isActive('noise_cancelling_airpods')) {
+      return null;
+    }
+    return this.scene.upgradeManager.getAirPodsResistance();
+  }
+
+  /**
+   * Get slow resistance factor (0 = no resistance, 0.5 = 50% resistance).
+   * Used by Micromanager to calculate effective slow factor.
+   * @returns {number}
+   */
+  getSlowResistance() {
+    const resistance = this.getMovementResistance();
+    return resistance ? resistance.slowResistance : 0;
   }
 
   /**

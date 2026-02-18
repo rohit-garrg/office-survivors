@@ -56,6 +56,18 @@ export class MeetingScheduler extends ChaosAgent {
 
     /** @type {Function|null} Space key handler reference */
     this._spaceHandler = null;
+
+    // Enrage: 2 min after spawn — can block 2 departments simultaneously
+    this.enrageTime = CONFIG.ENRAGE_MEETING_TIME;
+
+    /** @type {number} Max simultaneous blocks (increases on enrage) */
+    this.maxSimultaneousBlocks = 1;
+  }
+
+  /** Escalate stats on enrage */
+  onEnrage() {
+    this.maxSimultaneousBlocks = CONFIG.ENRAGE_MEETING_MAX_BLOCKS;
+    console.debug('[MeetingScheduler] enraged: can block 2 departments simultaneously');
   }
 
   /** Walk to department, block it, move to next */
@@ -225,8 +237,10 @@ export class MeetingScheduler extends ChaosAgent {
     if (entry) entry.timer = timerEvent;
 
     // Start cooldown after blocking
+    // When enraged and fewer than max blocks active, use short cooldown to quickly block another dept
+    const canBlockMore = this.isEnraged && this.blockedDepts.size < this.maxSimultaneousBlocks;
     this._onCooldown = true;
-    this._cooldownTimer = CONFIG.MEETING_COOLDOWN;
+    this._cooldownTimer = canBlockMore ? 2000 : CONFIG.MEETING_COOLDOWN;
   }
 
   /**

@@ -41,6 +41,15 @@ export class UpgradeManager {
 
     /** @type {boolean} Whether task navigation arrows should be shown (Reply-All Filter) */
     this.taskNavigationActive = false;
+
+    /** @type {boolean} Whether Executive Presence slow is currently active */
+    this.executivePresenceActive = false;
+
+    /** @type {Phaser.Time.TimerEvent|null} EP slow expiry timer */
+    this._epTimer = null;
+
+    /** @type {Set<string>} Agent types that spawned since last level-up (for smart offers) */
+    this._newAgentsSinceLevelUp = new Set();
   }
 
   /** Initialize and register event listeners */
@@ -49,6 +58,14 @@ export class UpgradeManager {
       this.applyUpgrade(data.upgrade.id);
     };
     this.scene.events.on('upgrade-selected', this._onUpgradeSelected);
+
+    // Track new agent spawns for smart upgrade offers
+    this._onAgentSpawned = (data) => {
+      if (data && data.type) {
+        this._newAgentsSinceLevelUp.add(data.type);
+      }
+    };
+    this.scene.events.on('agent-spawned', this._onAgentSpawned);
   }
 
   /** Per-frame update: check timed upgrade expiry */
@@ -85,9 +102,52 @@ export class UpgradeManager {
       return true;
     });
 
+    // Reactive agent-gating: anti-agent upgrades only appear after their target agent has spawned
+    const waveManager = this.scene.waveManager;
+    if (waveManager) {
+      available = available.filter((u) => {
+        // requiresAgent: specific agent type must have spawned
+        if (u.requiresAgent) {
+          const hasSpawned = waveManager.spawnedTypes.has(u.requiresAgent);
+          // Fallback: if player is 2+ levels past the agent's levelGate, offer anyway
+          if (!hasSpawned) {
+            const agentConfig = waveManager.getAgentConfig(u.requiresAgent);
+            if (agentConfig && playerLevel >= agentConfig.levelGate + 3
+                && (this.scene.elapsedTime || 0) >= agentConfig.timeGate) return true;
+            return false;
+          }
+        }
+        // requiresAgentCount: N agent types must have spawned
+        if (u.requiresAgentCount) {
+          if (waveManager.spawnedTypes.size < u.requiresAgentCount) return false;
+        }
+        return true;
+      });
+    }
+
+    // Smart offers: if a new agent spawned since last level-up, guarantee one anti-agent upgrade
+    let guaranteed = null;
+    if (this._newAgentsSinceLevelUp.size > 0) {
+      const antiAgentOptions = available.filter((u) =>
+        u.category === 'anti_agent' &&
+        (u.requiresAgent && this._newAgentsSinceLevelUp.has(u.requiresAgent))
+      );
+      if (antiAgentOptions.length > 0) {
+        guaranteed = antiAgentOptions[Math.floor(Math.random() * antiAgentOptions.length)];
+      }
+    }
+    this._newAgentsSinceLevelUp.clear();
+
     // Shuffle and pick up to 3
     const shuffled = [...available].sort(() => Math.random() - 0.5);
-    return shuffled.slice(0, 3);
+    let picks = shuffled.slice(0, 3);
+
+    // Ensure guaranteed upgrade is in the picks (replace last slot if needed)
+    if (guaranteed && !picks.find((u) => u.id === guaranteed.id)) {
+      picks[picks.length - 1] = guaranteed;
+    }
+
+    return picks;
   }
 
   /**
@@ -132,30 +192,40 @@ export class UpgradeManager {
         console.debug(`[UpgradeManager] Speed Reader: expanded all dept zones by ${apply.deliveryZoneBoost}x`);
         break;
 
+      case 'water_cooler_boost':
+        // Deep Breaths: halve water cooler cooldown (permanent)
+        this.permanentUpgrades.add(upgradeId);
+        console.debug('[UpgradeManager] Deep Breaths: water cooler cooldown halved');
+        break;
+
       case 'stress_decay':
         // Stress Ball: permanent passive stress decay bonus
         // StressManager checks isActive('stress_ball') each frame
         this.permanentUpgrades.add(upgradeId);
-        console.debug('[UpgradeManager] Stress Ball: +1%/sec passive stress decay activated');
+        console.debug('[UpgradeManager] Stress Ball: +0.25%/sec passive stress decay activated');
         break;
 
-      case 'movement_immunity':
-        // Noise-Cancelling AirPods: permanent immunity to freeze + slow (permanent)
-        // Player.freeze() and Micromanager slow check isActive('noise_cancelling_airpods')
+      case 'movement_resistance':
+        // Noise-Cancelling AirPods: 70% freeze resistance + 50% slow resistance (permanent)
+        // Player.freeze() and Micromanager check getMovementResistance()/getSlowResistance()
         this.permanentUpgrades.add(upgradeId);
-        // If currently frozen, unfreeze immediately
+        // If currently frozen, unfreeze immediately (resistance kicks in on next freeze)
         if (player.isFrozen) {
           player.isFrozen = false;
           player.clearTint();
         }
-        // If currently slowed by micromanager, remove that modifier
+        // If currently slowed by micromanager, reapply with resistance
+        // (remove and let next frame re-apply with new resistance values)
         player.removeSpeedModifier('micromanager_slow');
         break;
 
-      case 'agent_slow':
-        // Executive Presence: all chaos agents move 30% slower (permanent)
-        // Chaos agent update loops check isActive('executive_presence')
+      case 'agent_slow_on_delivery':
+        // Executive Presence: delivery-triggered agent slow (permanent upgrade, conditional effect)
         this.permanentUpgrades.add(upgradeId);
+        // Listen for deliveries to trigger the slow
+        this._epDeliveryHandler = () => this.triggerExecutivePresence();
+        this.scene.events.on('task-delivered', this._epDeliveryHandler);
+        console.debug('[UpgradeManager] Executive Presence: delivery-triggered agent slow activated');
         break;
 
       case 'task_navigation':
@@ -166,18 +236,22 @@ export class UpgradeManager {
         break;
 
       case 'corner_office': {
-        // Corner Office: expand most-delivered dept by 2x + auto-deliver proximity (permanent)
+        // Corner Office: expand best dept by 2x + auto-deliver proximity (permanent)
+        // If Dept Favorite already claimed a dept, use the second-most-delivered
         this.permanentUpgrades.add(upgradeId);
-        const favDept = this.scene.taskManager
-          ? this.scene.taskManager.getMostDeliveredDept()
-          : null;
-        if (favDept) {
-          this.cornerOfficeDept = favDept;
-          this.expandDepartmentZone(favDept, apply.zoneMultiplier);
-          console.debug(`[UpgradeManager] Corner Office: expanded ${favDept} by ${apply.zoneMultiplier}x + auto-deliver`);
+        let coDept = null;
+        if (this.scene.taskManager) {
+          coDept = this.favoriteDeptId
+            ? this.scene.taskManager.getSecondMostDeliveredDept(this.favoriteDeptId)
+            : this.scene.taskManager.getMostDeliveredDept();
+        }
+        if (coDept) {
+          this.cornerOfficeDept = coDept;
+          this.expandDepartmentZone(coDept, apply.zoneMultiplier);
+          console.debug(`[UpgradeManager] Corner Office: expanded ${coDept} by ${apply.zoneMultiplier}x + auto-deliver`);
         } else {
-          // Fallback: pick a random department
-          const deptList = DEPARTMENTS.map((d) => d.id);
+          // Fallback: pick a random department (excluding favorite)
+          const deptList = DEPARTMENTS.map((d) => d.id).filter((d) => d !== this.favoriteDeptId);
           this.cornerOfficeDept = randomFrom(deptList);
           this.expandDepartmentZone(this.cornerOfficeDept, apply.zoneMultiplier);
           console.debug(`[UpgradeManager] Corner Office: expanded ${this.cornerOfficeDept} (random) by ${apply.zoneMultiplier}x`);
@@ -193,13 +267,17 @@ export class UpgradeManager {
 
       case 'favorite_dept': {
         // Departmental Favorite: 2x XP + 2x stress relief on most-delivered dept (permanent)
+        // If Corner Office already claimed a dept, use the second-most-delivered
         this.permanentUpgrades.add(upgradeId);
-        const bestDept = this.scene.taskManager
-          ? this.scene.taskManager.getMostDeliveredDept()
-          : null;
-        this.favoriteDeptId = bestDept;
-        if (bestDept) {
-          console.debug(`[UpgradeManager] Departmental Favorite: ${bestDept} = 2x XP + 2x relief`);
+        let favDept = null;
+        if (this.scene.taskManager) {
+          favDept = this.cornerOfficeDept
+            ? this.scene.taskManager.getSecondMostDeliveredDept(this.cornerOfficeDept)
+            : this.scene.taskManager.getMostDeliveredDept();
+        }
+        this.favoriteDeptId = favDept;
+        if (favDept) {
+          console.debug(`[UpgradeManager] Departmental Favorite: ${favDept} = 2x XP + 2x relief`);
         }
         break;
       }
@@ -246,6 +324,33 @@ export class UpgradeManager {
     // Remove existing if re-applied (refresh timer)
     this.activeTimedUpgrades = this.activeTimedUpgrades.filter((u) => u.id !== id);
     this.activeTimedUpgrades.push({ id, remaining: durationMs, total: durationMs });
+  }
+
+  /**
+   * Get AirPods resistance values from the upgrade data.
+   * @returns {{freezeReduction: number, slowResistance: number}|null}
+   */
+  getAirPodsResistance() {
+    if (!this.isActive('noise_cancelling_airpods')) return null;
+    const upgrade = UPGRADES.find((u) => u.id === 'noise_cancelling_airpods');
+    return upgrade ? { freezeReduction: upgrade.apply.freezeReduction, slowResistance: upgrade.apply.slowResistance } : null;
+  }
+
+  /** Trigger Executive Presence: slow all agents for 8s on delivery */
+  triggerExecutivePresence() {
+    if (!this.isActive('executive_presence')) return;
+
+    this.executivePresenceActive = true;
+
+    // Reset timer if already active (refresh window)
+    if (this._epTimer) this._epTimer.remove();
+    this._epTimer = this.scene.time.delayedCall(CONFIG.EXECUTIVE_PRESENCE_DURATION, () => {
+      this.executivePresenceActive = false;
+      this._epTimer = null;
+      console.debug('[UpgradeManager] Executive Presence slow expired');
+    });
+
+    console.debug('[UpgradeManager] Executive Presence triggered: agents slowed for 8s');
   }
 
   /**
@@ -430,6 +535,12 @@ export class UpgradeManager {
     this.cornerOfficeDept = null;
     this.favoriteDeptId = null;
     this.taskNavigationActive = false;
+    this.executivePresenceActive = false;
+    if (this._epTimer) { this._epTimer.remove(); this._epTimer = null; }
     this.scene.events.off('upgrade-selected', this._onUpgradeSelected);
+    this.scene.events.off('agent-spawned', this._onAgentSpawned);
+    if (this._epDeliveryHandler) {
+      this.scene.events.off('task-delivered', this._epDeliveryHandler);
+    }
   }
 }

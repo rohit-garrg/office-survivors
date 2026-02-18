@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import CONFIG from '../config/gameConfig.js';
 import { trackEvent } from '../utils/analytics.js';
+import { isTouchDevice } from '../utils/helpers.js';
 
 const PIXEL_FONT = '"Press Start 2P", monospace';
 
@@ -281,19 +282,32 @@ export class TitleScene extends Phaser.Scene {
     }).setOrigin(0.5).setVisible(false).setDepth(102);
     group.push(panelTitle);
 
-    // Content lines
-    const lines = [
-      { text: 'WASD / Arrow Keys - Move', color: '#FFFFFF' },
-      { text: 'Shift (hold) - Sprint', color: '#FFFFFF' },
-      { text: '', color: '#FFFFFF' },
-      { text: 'Pick up tasks and deliver them', color: '#aaaacc' },
-      { text: 'to matching departments', color: '#aaaacc' },
-      { text: '', color: '#FFFFFF' },
-      { text: 'Avoid chaos agents!', color: '#ff6666' },
-      { text: '', color: '#FFFFFF' },
-      { text: 'Survive the workday.', color: '#FFD700' },
-      { text: 'Climb the corporate ladder.', color: '#FFD700' },
-    ];
+    // Content lines — show touch controls on mobile, keyboard on desktop
+    const lines = isTouchDevice()
+      ? [
+          { text: 'Tap - Move to that spot', color: '#FFFFFF' },
+          { text: 'Hold - Sprint', color: '#FFFFFF' },
+          { text: '', color: '#FFFFFF' },
+          { text: 'Pick up tasks and deliver them', color: '#aaaacc' },
+          { text: 'to matching departments', color: '#aaaacc' },
+          { text: '', color: '#FFFFFF' },
+          { text: 'Avoid chaos agents!', color: '#ff6666' },
+          { text: '', color: '#FFFFFF' },
+          { text: 'Survive the workday.', color: '#FFD700' },
+          { text: 'Climb the corporate ladder.', color: '#FFD700' },
+        ]
+      : [
+          { text: 'WASD / Arrow Keys - Move', color: '#FFFFFF' },
+          { text: 'Shift (hold) - Sprint', color: '#FFFFFF' },
+          { text: '', color: '#FFFFFF' },
+          { text: 'Pick up tasks and deliver them', color: '#aaaacc' },
+          { text: 'to matching departments', color: '#aaaacc' },
+          { text: '', color: '#FFFFFF' },
+          { text: 'Avoid chaos agents!', color: '#ff6666' },
+          { text: '', color: '#FFFFFF' },
+          { text: 'Survive the workday.', color: '#FFD700' },
+          { text: 'Climb the corporate ladder.', color: '#FFD700' },
+        ];
 
     let lineY = cy - panelH / 2 + 70;
     for (const line of lines) {

@@ -31,6 +31,25 @@ export class Micromanager extends ChaosAgent {
 
     /** @type {boolean} Whether slow aura is currently applied */
     this._slowActive = false;
+
+    // Enrage: 3 min after spawn — increased range + stress rate
+    this.enrageTime = CONFIG.ENRAGE_MICROMANAGER_TIME;
+  }
+
+  /** Escalate stats on enrage */
+  onEnrage() {
+    // No speed change — just range and stress increase (handled via config reads)
+    console.debug('[Micromanager] enraged: range + stress rate increased');
+  }
+
+  /** Get current range (enraged = larger) */
+  getRange() {
+    return this.isEnraged ? CONFIG.ENRAGE_MICROMANAGER_RANGE : CONFIG.MICROMANAGER_RANGE;
+  }
+
+  /** Get current stress rate (enraged = higher) */
+  getStressRate() {
+    return this.isEnraged ? CONFIG.ENRAGE_MICROMANAGER_STRESS_RATE : CONFIG.MICROMANAGER_STRESS_RATE;
   }
 
   /** Follow player, apply/remove slow aura based on distance */
@@ -53,7 +72,7 @@ export class Micromanager extends ChaosAgent {
       if (this._slowActive) {
         const stressManager = this.scene.stressManager;
         if (stressManager) {
-          const stressAmount = CONFIG.MICROMANAGER_STRESS_RATE * (delta / 1000);
+          const stressAmount = this.getStressRate() * (delta / 1000);
           stressManager.addInstantStress(stressAmount, 'micromanager-slow');
         }
       }
@@ -75,22 +94,27 @@ export class Micromanager extends ChaosAgent {
     const player = this.scene.player;
     if (!player) return false;
     const dist = Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y);
-    return dist <= CONFIG.MICROMANAGER_RANGE;
+    return dist <= this.getRange();
   }
 
-  /** Apply the slow debuff to the player */
+  /** Apply the slow debuff to the player (resistance-based with AirPods) */
   applySlowAura() {
     if (this._slowActive) return;
     const player = this.scene.player;
     if (!player) return;
 
-    // AirPods: immune to slow
-    if (player.isImmuneToSlow()) {
-      return;
+    // Calculate effective slow factor with AirPods resistance
+    // Base slow: 0.6x. With 50% resistance: 0.6 + (1 - 0.6) * 0.5 = 0.8x
+    let effectiveSlowFactor = CONFIG.MICROMANAGER_SLOW_FACTOR;
+    const resistance = player.getSlowResistance();
+    if (resistance > 0) {
+      const slowAmount = 1 - CONFIG.MICROMANAGER_SLOW_FACTOR; // how much speed is removed
+      effectiveSlowFactor = 1 - slowAmount * (1 - resistance);
+      console.debug(`[Micromanager] slow reduced by AirPods: ${CONFIG.MICROMANAGER_SLOW_FACTOR}x -> ${effectiveSlowFactor.toFixed(2)}x`);
     }
 
     this._slowActive = true;
-    player.setSpeedModifier('micromanager_slow', CONFIG.MICROMANAGER_SLOW_FACTOR);
+    player.setSpeedModifier('micromanager_slow', effectiveSlowFactor);
     player.setTint(0xff8888); // Red tint = slowed
 
     this.scene.events.emit('agent-disruption', {

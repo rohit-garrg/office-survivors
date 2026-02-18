@@ -202,6 +202,15 @@ export class WaveManager {
   }
 
   /**
+   * Get agent config from schedule by type.
+   * @param {string} agentType
+   * @returns {object|null}
+   */
+  getAgentConfig(agentType) {
+    return AGENT_SCHEDULE.find((c) => c.type === agentType) || null;
+  }
+
+  /**
    * Remove a specific agent from tracking.
    * @param {import('../entities/ChaosAgent.js').ChaosAgent} agent
    */

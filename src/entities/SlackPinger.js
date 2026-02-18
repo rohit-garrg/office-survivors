@@ -45,6 +45,24 @@ export class SlackPinger extends ChaosAgent {
 
     /** @type {Array} Active decoy tasks on the map (for cleanup tracking) */
     this._activeDecoys = [];
+
+    // Enrage: 2 min after spawn — faster decoys + larger stress aura
+    this.enrageTime = CONFIG.ENRAGE_SLACKPINGER_TIME;
+  }
+
+  /** Escalate stats on enrage */
+  onEnrage() {
+    console.debug('[SlackPinger] enraged: faster decoy spawn + larger aura');
+  }
+
+  /** Get current decoy spawn interval (enraged = faster) */
+  getDecoyInterval() {
+    return this.isEnraged ? CONFIG.ENRAGE_SLACKPINGER_DECOY_INTERVAL : CONFIG.DECOY_SPAWN_INTERVAL;
+  }
+
+  /** Get current aura range (enraged = larger) */
+  getAuraRange() {
+    return this.isEnraged ? CONFIG.ENRAGE_SLACKPINGER_AURA_RANGE : CONFIG.SLACKPINGER_AURA_RANGE;
   }
 
   /** Wander and periodically spawn decoy tasks */
@@ -81,7 +99,7 @@ export class SlackPinger extends ChaosAgent {
     this._decoyTimer -= delta;
     if (this._decoyTimer <= 0) {
       this.spawnDecoy(time);
-      this._decoyTimer = CONFIG.DECOY_SPAWN_INTERVAL;
+      this._decoyTimer = this.getDecoyInterval();
     }
 
     // Check decoy lifetimes (remove expired ones)
@@ -100,7 +118,7 @@ export class SlackPinger extends ChaosAgent {
     if (!player) return;
 
     const dist = Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y);
-    if (dist <= CONFIG.SLACKPINGER_AURA_RANGE) {
+    if (dist <= this.getAuraRange()) {
       const stressManager = this.scene.stressManager;
       if (stressManager) {
         const stressAmount = CONFIG.SLACKPINGER_AURA_STRESS_RATE * (delta / 1000);

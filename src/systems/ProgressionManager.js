@@ -4,7 +4,7 @@ import { trackEvent } from '../utils/analytics.js';
 /**
  * ProgressionManager: handles XP, levels, tier transitions, and promotions.
  *
- * XP thresholds: [80, 120, 160, 200, 260, 440, 540, 660] for levels 2-9.
+ * XP thresholds: [80, 120, 180, 240, 340, 520, 680, 840] for levels 2-9.
  * Tiers: INTERN (1-2), ASSOCIATE (3-4), MANAGER (5-6), DIRECTOR (7-8), CEO (9).
  */
 export class ProgressionManager {
@@ -31,6 +31,9 @@ export class ProgressionManager {
 
     /** @type {number} Number of post-CEO milestones triggered */
     this.milestoneCount = 0;
+
+    /** @type {number} Cumulative XP multiplier bonus from post-CEO milestones */
+    this.milestoneXPMultiplier = 0;
   }
 
   /** Initialize progression state */
@@ -41,6 +44,7 @@ export class ProgressionManager {
     this.totalXP = 0;
     this.postCeoXP = 0;
     this.milestoneCount = 0;
+    this.milestoneXPMultiplier = 0;
 
     // Listen for task delivery to award XP
     this._onTaskDelivered = (data) => {
@@ -121,7 +125,7 @@ export class ProgressionManager {
    * @returns {number}
    */
   getXPForNextLevel() {
-    // XP_PER_LEVEL is [80,120,160,220,300,400,500,650] for levels 2-9
+    // XP_PER_LEVEL is [80,120,180,240,340,520,680,840] for levels 2-9
     // Index 0 = XP needed to reach level 2 from level 1
     const index = this.level - 1;
     if (index >= CONFIG.XP_PER_LEVEL.length) {
@@ -150,6 +154,26 @@ export class ProgressionManager {
    */
   getTierKey() {
     return this.currentTier.toLowerCase();
+  }
+
+  /**
+   * Add XP multiplier bonus from a post-CEO milestone.
+   * @param {number} amount - Additional XP multiplier (e.g., 0.5 = +50%)
+   */
+  addMilestoneXPBonus(amount) {
+    this.milestoneXPMultiplier = Math.min(
+      this.milestoneXPMultiplier + amount,
+      CONFIG.MILESTONE_XP_MULTIPLIER_CAP
+    );
+    console.debug(`[ProgressionManager] milestone XP multiplier now +${this.milestoneXPMultiplier.toFixed(1)}x (cap: ${CONFIG.MILESTONE_XP_MULTIPLIER_CAP})`);
+  }
+
+  /**
+   * Get total milestone XP multiplier (1.0 = no bonus, 1.5 = +50%, etc.)
+   * @returns {number}
+   */
+  getMilestoneXPMultiplier() {
+    return 1 + this.milestoneXPMultiplier;
   }
 
   /**

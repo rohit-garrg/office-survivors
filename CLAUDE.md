@@ -21,9 +21,9 @@ Standalone project, separate from the Astro website. Built output gets copied to
 
 - `src/scenes/` — Phaser scenes: Boot, Title, HowToPlay, Game, UI (parallel HUD), LevelUp, GameOver
 - `src/entities/` — Player, Task (state machine), ChaosAgent base + 5 subclasses, Assistant
-- `src/systems/` — TaskManager, StressManager, UpgradeManager, WaveManager, ProgressionManager, ParticleManager, SoundManager
+- `src/systems/` — TaskManager, StressManager, UpgradeManager, WaveManager, ProgressionManager, ParticleManager, SoundManager, TutorialManager
 - `src/config/` — gameConfig.js (single source of truth), taskData, upgradeData, agentSchedule, mapData
-- `src/ui/` — HUD, UpgradeCard, PromotionPopup, FloatingText
+- `src/ui/` — HUD, UpgradeCard, PromotionPopup, FloatingText, Toast
 - `src/utils/` — helpers (color, math, random), analytics (GA4 event tracking)
 - `public/assets/` — sprites, tiles, furniture, environment, decor, ui, audio
 
@@ -50,9 +50,9 @@ this.scene.get('GameScene').events.on('task-delivered', this.onTaskDelivered, th
 
 ## Event Contract
 
-Events follow naming patterns: `task-*`, `stress-*`, `xp-*`, `level-up`, `upgrade-*`, `agent-*`, `department-*`, `game-*`, `ceo-milestone`, `milestone-*`. See emitters/listeners in source files for exact payloads. Key events:
+Events follow naming patterns: `task-*`, `stress-*`, `xp-*`, `level-up`, `upgrade-*`, `agent-*`, `department-*`, `game-*`, `ceo-milestone`, `milestone-*`, `water-cooler-*`, `pressure-*`. See emitters/listeners in source files for exact payloads. Key events:
 
-- `task-spawned/picked-up/delivered/expired/partial-delivery` — task lifecycle
+- `task-spawned/picked-up/delivered/expired/partial-delivery/pickup-failed` — task lifecycle
 - `stress-changed/threshold/max` — stress system (max triggers game over)
 - `level-up` `{ level, tier, isPromotion }` — triggers LevelUpScene
 - `game-over` `{ won, stats }` — passed as scene launch param, not event listener
@@ -118,7 +118,7 @@ The game deploys INTO the Astro website's `public/projects/office-survivors/` di
 **Important:** `upgrade-rebalance-v2.md` at project root documents all balance changes applied on top of the spec. When spec values and gameConfig.js disagree, gameConfig.js is the source of truth. Key changes:
 - Stress rates reduced ~30% from spec values
 - Stress relief on delivery significantly increased
-- Passive stress decay added (0.5%/sec above 50% stress)
-- All 14 upgrades overhauled to S or A tier (no filler). Many timed upgrades are now permanent.
+- Passive stress decay added (0.65%/sec above 50% stress)
+- All 15 upgrades overhauled to S or A tier (no filler). Many timed upgrades are now permanent.
 - XP curve reduced for late levels (5-9)
 - Pickup radius 36px, stamina regen 15/sec, spawn interval starts at 6000ms

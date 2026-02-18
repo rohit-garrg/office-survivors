@@ -33,10 +33,26 @@ export class TaskManager {
 
     /** @type {Map<string, number>} Delivery count per department (for Departmental Favorite) */
     this.deliveryCounts = new Map();
+
+    /** @type {number} Timestamp of last junk task delivery (for Reply-All chain mechanic) */
+    this.lastJunkDeliveryTime = 0;
+
+    /** @type {number} Count of junk tasks delivered in current chain window */
+    this.junkChainCount = 0;
+
+    /** @type {Map<string, number>} Hot zone expiry times per department (timestamp) */
+    this.hotZones = new Map();
   }
 
-  /** Initialize the task object pool */
+  /** Initialize the task object pool and event listeners */
   init() {
+    // Listen for department unblocks to create hot zones
+    this._onDeptUnblocked = (data) => {
+      this.hotZones.set(data.department, this.scene.time.now + CONFIG.PRESSURE_HOT_ZONE_DURATION);
+      console.debug(`[TaskManager] Hot Zone: ${data.department} for ${CONFIG.PRESSURE_HOT_ZONE_DURATION / 1000}s`);
+    };
+    this.scene.events.on('department-unblocked', this._onDeptUnblocked);
+
     // Create 30 task entities in the pool
     for (let i = 0; i < 30; i++) {
       const task = new Task(this.scene, -100, -100);
@@ -270,12 +286,26 @@ export class TaskManager {
       xp = CONFIG.TASK_XP_SINGLE_BASE;
     }
 
-    // Reply-All "junk mail" penalty: 50% XP unless Reply-All Filter is active
+    // Reply-All "junk mail" XP: 50% normally, full XP on chain (2nd+ junk in window)
     if (task.isReplyAll) {
       const hasFilter = this.scene.upgradeManager &&
         this.scene.upgradeManager.isActive('reply_all_filter');
       if (!hasFilter) {
-        xp = Math.round(xp * CONFIG.REPLYALL_TASK_XP_MULT);
+        // Check chain: if 2nd+ junk delivered within chain window, give full XP
+        const now = this.scene.time.now;
+        if (now - this.lastJunkDeliveryTime <= CONFIG.REPLYALL_CHAIN_WINDOW && this.junkChainCount >= 1) {
+          xp = Math.round(xp * CONFIG.REPLYALL_CHAIN_XP_MULT);
+          console.debug(`[TaskManager] Reply-All chain bonus! Full XP (chain #${this.junkChainCount + 1})`);
+        } else {
+          xp = Math.round(xp * CONFIG.REPLYALL_TASK_XP_MULT);
+        }
+        // Update chain tracking
+        if (now - this.lastJunkDeliveryTime <= CONFIG.REPLYALL_CHAIN_WINDOW) {
+          this.junkChainCount++;
+        } else {
+          this.junkChainCount = 1;
+        }
+        this.lastJunkDeliveryTime = now;
       }
     }
 
@@ -292,7 +322,67 @@ export class TaskManager {
       xp = Math.round(xp * CONFIG.DEPT_FAVORITE_XP_MULT);
     }
 
+    // Post-CEO milestone XP multiplier (stacks per milestone)
+    if (this.scene.progressionManager && this.scene.progressionManager.milestoneXPMultiplier > 0) {
+      xp = Math.round(xp * this.scene.progressionManager.getMilestoneXPMultiplier());
+    }
+
+    // Pressure bonus: risk-reward XP bonuses
+    const pressureResult = this.calculatePressureBonus(departmentId);
+    if (pressureResult.multiplier > 1) {
+      xp = Math.round(xp * pressureResult.multiplier);
+    }
+
     return xp;
+  }
+
+  /**
+   * Calculate pressure bonus multiplier based on agent proximity, stress, and hot zones.
+   * @param {string} departmentId
+   * @returns {{multiplier: number, reasons: string[]}}
+   */
+  calculatePressureBonus(departmentId) {
+    let bonus = 0;
+    const reasons = [];
+    const player = this.scene.player;
+
+    // Agent within 128px during delivery
+    if (player && this.scene.waveManager) {
+      const agents = this.scene.waveManager.getAllActiveAgents();
+      for (const agent of agents) {
+        const dist = distance(player.x, player.y, agent.x, agent.y);
+        if (dist <= CONFIG.PRESSURE_AGENT_RANGE) {
+          bonus += CONFIG.PRESSURE_AGENT_XP_BONUS;
+          reasons.push('UNDER PRESSURE');
+          break; // Only count once
+        }
+      }
+    }
+
+    // Stress above threshold during delivery
+    if (this.scene.stressManager && this.scene.stressManager.currentStress >= CONFIG.PRESSURE_STRESS_THRESHOLD) {
+      bonus += CONFIG.PRESSURE_STRESS_XP_BONUS;
+      reasons.push('CLUTCH DELIVERY');
+    }
+
+    // Hot zone: recently unblocked department
+    if (departmentId) {
+      const expiry = this.hotZones.get(departmentId);
+      if (expiry && this.scene.time.now < expiry) {
+        bonus += CONFIG.PRESSURE_HOT_ZONE_XP_BONUS;
+        reasons.push('HOT ZONE');
+      }
+    }
+
+    // Cap total multiplier
+    const multiplier = Math.min(1 + bonus, CONFIG.PRESSURE_MAX_MULTIPLIER);
+
+    if (reasons.length > 0) {
+      this.scene.events.emit('pressure-bonus', { multiplier, reasons });
+      console.debug(`[TaskManager] Pressure bonus: ${multiplier.toFixed(2)}x (${reasons.join(', ')})`);
+    }
+
+    return { multiplier, reasons };
   }
 
   /**
@@ -303,6 +393,25 @@ export class TaskManager {
     let maxDept = null;
     let maxCount = 0;
     for (const [dept, count] of this.deliveryCounts) {
+      if (count > maxCount) {
+        maxCount = count;
+        maxDept = dept;
+      }
+    }
+    return maxDept;
+  }
+
+  /**
+   * Get the second-most-delivered-to department (excludes a given dept).
+   * Used to force Corner Office and Dept Favorite onto different departments.
+   * @param {string} excludeDept - Department to exclude
+   * @returns {string|null}
+   */
+  getSecondMostDeliveredDept(excludeDept) {
+    let maxDept = null;
+    let maxCount = 0;
+    for (const [dept, count] of this.deliveryCounts) {
+      if (dept === excludeDept) continue;
       if (count > maxCount) {
         maxCount = count;
         maxDept = dept;
@@ -391,5 +500,9 @@ export class TaskManager {
   destroy() {
     this.activeTasks = [];
     this.taskPool = [];
+    this.hotZones.clear();
+    if (this._onDeptUnblocked) {
+      this.scene.events.off('department-unblocked', this._onDeptUnblocked);
+    }
   }
 }

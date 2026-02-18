@@ -30,6 +30,7 @@ export class FloatingText {
       color: color,
       stroke: '#000000',
       strokeThickness: 3,
+      resolution: 3,
     }).setOrigin(0.5).setDepth(100);
 
     // Float up and fade out

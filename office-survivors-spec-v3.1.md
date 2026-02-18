@@ -238,13 +238,15 @@ The iframe re-shows the "Click to Play" overlay when it loses focus (detected vi
 ```javascript
 // config/mapData.js
 export const TASK_SPAWN_POINTS = [
-  // Desks (scattered across open floor)
-  { x: 15, y: 10 }, { x: 18, y: 10 }, { x: 25, y: 10 },
-  { x: 4, y: 14 }, { x: 35, y: 14 },
-  // Printers
-  { x: 15, y: 14 }, { x: 22, y: 14 },
-  // Mail room (higher spawn weight)
-  { x: 4, y: 25 }, { x: 6, y: 25 }, { x: 8, y: 25 },
+  // Open floor between departments (y 8-11)
+  { x: 10, y: 8 },  { x: 16, y: 8 },  { x: 22, y: 8 },
+  { x: 28, y: 8 },  { x: 12, y: 11 }, { x: 20, y: 11 },
+  { x: 27, y: 11 }, { x: 9, y: 10 },  { x: 31, y: 10 },
+  // Central corridor (y 13-15)
+  { x: 10, y: 15 }, { x: 17, y: 15 }, { x: 22, y: 15 },
+  { x: 30, y: 15 }, { x: 12, y: 13 }, { x: 25, y: 13 },
+  // South corridor between Engineering and HR (y 18-21)
+  { x: 12, y: 19 }, { x: 18, y: 19 }, { x: 16, y: 21 },
 ];
 
 export const PLAYER_START = { x: 20, y: 17 };
@@ -303,7 +305,7 @@ A competent player delivers roughly 1 task every 6-8 seconds in early game (walk
 
 **Validation:** A skilled player hitting 70-80% delivery efficiency reaches CEO at ~7-8 min, leaving 2-3 min for post-CEO play. An average player reaches Director (level 7-8) and survives. A struggling player dies at Manager or Director. Late XP requirements increased from v3.1 originals to push CEO later and leave room for post-CEO milestones.
 
-**Post-CEO Milestones:** After reaching CEO (level 9), milestones trigger "Bonus Upgrade!" popups. The first milestone costs 400 XP, and each subsequent one costs 200 more (400, 600, 800...). Each milestone also grants a permanent +0.3%/sec passive stress decay bonus, even if no upgrades are available. If the upgrade pool is empty or all options are stale, the stress decay bonus is granted silently. This keeps the reward loop alive for the full 10 minutes.
+**Post-CEO Milestones:** After reaching CEO (level 9), milestones trigger "Bonus Upgrade!" popups. The first milestone costs 300 XP, and each subsequent one costs 100 more (300, 400, 500...). Each milestone grants a permanent +0.5x XP multiplier bonus. Milestone #3 triggers a special "IPO Bell" celebration. If the upgrade pool is empty or all options are stale, the XP multiplier bonus is granted silently. This keeps the reward loop alive for the full 10 minutes.
 
 ### Multi-Stop Task Mechanic (Precisely Defined)
 
@@ -412,9 +414,9 @@ An agent type only spawns if BOTH conditions are met: enough game time has passe
 | Agent | Time Gate | Level Gate | Count | Respawn |
 |-------|-----------|------------|-------|---------|
 | **The Micromanager** | 1:30 | Level 2 | 1 (max 2 after 6:00) | Persistent (always active) |
-| **The Reply-All Guy** | 3:00 | Level 3 | 1 (max 2 after 7:00) | Persistent, cooldown between bursts |
+| **The Chatty Colleague** | 2:00 | Level 2 | 1 (max 2 after 8:00) | Persistent |
 | **The Meeting Scheduler** | 4:30 | Level 4 | 1 | Persistent, cooldown between blocks |
-| **The Chatty Colleague** | 5:30 | Level 5 | 1 (max 2 after 8:00) | Persistent |
+| **The Reply-All Guy** | 4:30 | Level 4 | 1 (max 2 after 7:00) | Persistent, cooldown between bursts |
 | **The Slack Pinger** | 6:00 | Level 5 | 1 | Persistent |
 
 ### Agent Behaviors (Precisely Defined)
@@ -484,7 +486,7 @@ stressChange = (sum of stress from each undelivered task) - (recent delivery rel
 
 ### Passive Stress Decay (Rebalance v2)
 
-When stress exceeds 50%, a passive decay of -0.5%/sec kicks in as a safety net to prevent snowballing. The Stress Ball upgrade adds +1.0%/sec on top (total -1.5%/sec above 50%).
+When stress exceeds 50%, a passive decay of -0.65%/sec kicks in as a safety net to prevent snowballing. The Stress Ball upgrade adds +0.35%/sec on top (total -1.0%/sec above 50%). Additionally, task expiry stress is capped at 20% within any 5-second rolling window, preventing Reply-All burst expiries from causing instant death spirals.
 
 ### Stress Relief
 
@@ -493,7 +495,7 @@ When stress exceeds 50%, a passive decay of -0.5%/sec kicks in as a safety net t
 | Deliver single-stop task | -7% | Deliveries must feel rewarding |
 | Deliver multi-stop (complete) | -11% | Only on final delivery |
 | Deliver triple-stop (complete) | -16% | Big relief for big effort |
-| Stress Ball upgrade | Permanent -1%/sec passive decay | Stacks with base passive decay above 50% |
+| Stress Ball upgrade | Permanent -0.35%/sec passive decay | Stacks with base 0.65%/sec decay above 50% (total 1.0%/sec) |
 
 ### Stress Validation
 
@@ -526,24 +528,25 @@ Undelivered tasks: ~12. Stress per second: ~0.37%/sec. They're delivering ~4 per
 
 ### Tier Gating (Rebalance v2)
 
-When the player levels up, the 3 upgrade options are drawn from a **filtered pool**. Most upgrades unlock earlier now so they're relevant when you get them. Target: 5 S-tier + 9 A-tier = 0 filler picks.
+When the player levels up, the 3 upgrade options are drawn from a **filtered pool**. Most upgrades unlock earlier now so they're relevant when you get them. Some anti-agent upgrades also require the relevant agent type to have spawned. Target: 6 S-tier + 9 A-tier = 0 filler picks.
 
-| Upgrade | Available From | Category |
-|---------|---------------|----------|
-| Coffee IV Drip | Level 1 | Always useful |
-| Extra Hands | Level 1 | Always useful |
-| Speed Reader | Level 1 | Always useful |
-| Stress Ball | Level 1 | Always useful |
-| Noise-Cancelling AirPods | Level 2+ | Anti-agent |
-| Executive Presence | Level 3+ | Anti-agent |
-| Reply-All Filter | Level 3+ | Anti-agent |
-| Meeting Blocker | Level 3+ | Anti-agent |
-| LinkedIn Thought Leader | Level 3+ | XP boost |
-| Corner Office | Level 3+ | Delivery |
-| Departmental Favorite | Level 3+ | Delivery |
-| Inbox Zero | Level 3+ | Delivery |
-| Fast Tracker | Level 4+ | Advanced |
-| Strategic Delegation | Level 5+ (Manager tier) | Advanced |
+| Upgrade | Available From | Category | Condition |
+|---------|---------------|----------|-----------|
+| Coffee IV Drip | Level 1 | Always useful | — |
+| Extra Hands | Level 1 | Always useful | — |
+| Speed Reader | Level 2+ | Always useful | — |
+| Deep Breaths | Level 2+ | Always useful | — |
+| Stress Ball | Level 3+ | Always useful | — |
+| Inbox Zero | Level 3+ | Delivery | — |
+| LinkedIn Thought Leader | Level 3+ | XP boost | — |
+| Noise-Cancelling AirPods | Level 4+ | Anti-agent | Requires Micromanager spawned |
+| Executive Presence | Level 4+ | Anti-agent | Requires 2+ agent types spawned |
+| Reply-All Filter | Level 4+ | Anti-agent | Requires Reply-All Guy spawned |
+| Meeting Blocker | Level 4+ | Anti-agent | Requires Meeting Scheduler spawned |
+| Corner Office | Level 5+ | Delivery | — |
+| Departmental Favorite | Level 5+ | Delivery | — |
+| Fast Tracker | Level 5+ | Advanced | — |
+| Strategic Delegation | Level 6+ | Advanced | — |
 
 ### Effects (Rebalance v2 — All S/A Tier)
 
@@ -552,26 +555,28 @@ When the player levels up, the 3 upgrade options are drawn from a **filtered poo
 | Coffee IV Drip | +20% move speed | Permanent | "Mainlining caffeine. As one does." |
 | Extra Hands | +1 carry capacity | Permanent | "You've grown a third arm. Metaphorically." |
 | Speed Reader | +40% pickup radius + 40% delivery zone size on ALL depts | Permanent | "You can read a memo from across the room. And deliver from across the hall." |
-| Stress Ball | Permanent -1%/sec passive stress decay (stacks with base decay) | Permanent | "Squeeze. Breathe. Repeat. Forever." |
-| Noise-Cancelling AirPods | Immune to ALL movement impairment (freeze + slow) | Permanent | "Sorry, can't hear you. In a zone. Permanently." |
-| Executive Presence | All chaos agents move 30% slower | Permanent | "Something about your aura says 'don't bother me.' Permanently." |
+| Deep Breaths | Water cooler cooldown halved: 20s → 10s | Permanent | "In through the nose, out through the mouth. You got this." |
+| Stress Ball | Permanent -0.35%/sec passive stress decay (stacks with base 0.65%/sec decay) | Permanent | "Squeeze. Breathe. Repeat. Forever." |
+| Noise-Cancelling AirPods | 70% freeze resistance + 50% slow resistance | Permanent | "Sorry, can't hear you. In a zone. Permanently." |
+| Executive Presence | On delivery: all agents slow 40% for 8s | Permanent | "Deliver a task and everyone backs off. Temporarily." |
 | Reply-All Filter | Decoy tasks glow red + navigation arrows on all tasks | Permanent | "Your spam filter leveled up. Now with navigation." |
 | Meeting Blocker | Block durations halved + deliver through blocks at 75% XP | Permanent | "You declined all meetings. Power move." |
 | LinkedIn Thought Leader | 2x XP | 60s | "Posted a hot take. Engagement through the roof." |
 | Corner Office | Most-delivered dept zone 2x bigger + auto-deliver within 80px proximity | Permanent | "Prime real estate. Tasks practically deliver themselves." |
 | Departmental Favorite | 2x XP + 2x stress relief on most-delivered dept | Permanent | "They owe you a favor. A big one." |
 | Inbox Zero | Instantly deliver all currently held tasks | Instant (one-time) | "The mythical state. Achieved briefly." |
-| Strategic Delegation | NPC assistant spawns, auto-delivers 1 task every 45s | Permanent | "Finally, leverage." |
+| Strategic Delegation | NPC assistant spawns, auto-delivers 1 task every 30s | Permanent | "Finally, leverage." |
 | Fast Tracker | Next 5 multi-stop tasks skip their last stop + 3% stress relief each | 5 uses, then gone | "Apparently you have authority to fast-track. And it feels great." |
 
 **Key changes in Rebalance v2 (from spec v3.1 originals):**
+- Deep Breaths: NEW upgrade — halves water cooler cooldown (S-tier)
 - Speed Reader: now also expands ALL delivery zones by 40% (S-tier)
-- Stress Ball: changed from instant -15% to permanent passive decay (S-tier)
-- Noise-Cancelling AirPods: permanent, covers ALL movement impairment not just Chatty (A-tier)
-- Executive Presence: permanent 30% agent slowdown instead of 20s repel (A-tier)
-- Reply-All Filter: gate lowered Lv6→Lv3, adds task navigation (A-tier)
+- Stress Ball: changed from instant -15% to permanent -0.5%/sec passive decay (S-tier)
+- Noise-Cancelling AirPods: permanent 70% freeze resistance + 50% slow resistance, requires Micromanager spawned (A-tier)
+- Executive Presence: on delivery, 40% agent slowdown for 8s, requires 2+ agents spawned (A-tier)
+- Reply-All Filter: requires Reply-All Guy spawned, adds task navigation (A-tier)
 - Corner Office: uses most-delivered dept instead of random, adds proximity auto-deliver (A-tier)
-- Meeting Blocker: permanent, halves blocks + allows 75% XP delivery through blocks (A-tier)
+- Meeting Blocker: permanent, halves blocks + allows 75% XP delivery through blocks, requires Meeting Scheduler spawned (A-tier)
 - Departmental Favorite: now gives 2x XP + 2x stress relief instead of just range (A-tier)
 - LinkedIn Thought Leader: 2x for 60s (was 1.5x for 45s)
 - Fast Tracker: 5 charges (was 3) + 3% stress relief per skip
@@ -613,7 +618,7 @@ When the player levels up, the 3 upgrade options are drawn from a **filtered poo
 
 - **Top-left cluster:** Level + Title, XP bar with numbers, carried task indicators (colored squares with department initial, multi-stop shows route), stamina bar.
 - **Top-right:** Stress meter (large, prominent, with percentage), countdown timer in a bordered box.
-- **Floating text:** Task name appears above the player for 2 seconds on pickup, then fades. Keep font small, max 30 characters visible.
+- **Floating text:** Task name appears above the player for 3 seconds on pickup, then fades. Keep font small, max 45 characters visible.
 - **Active upgrade indicators:** Small icons below the stamina bar showing timed upgrades with remaining duration.
 
 ### Screen Flow
@@ -870,7 +875,7 @@ office-survivors/
 - [ ] HUD shows multi-stop route for carried tasks
 - [ ] Promotion popup at tier transitions
 - [ ] Level-up screen: 3 upgrade cards, tier-gated pool
-- [ ] Implement all 14 upgrade effects
+- [ ] Implement all 15 upgrade effects
 - [ ] Title display updates in HUD on level-up
 
 **Milestone gate:** Play 3 games targeting CEO. Is it achievable ~20% of the time? Does multi-stop feel like interesting logistics or annoying backtracking?
@@ -982,6 +987,8 @@ export default {
   TASK_WARNING_TIME: 45000,         // ms before flashing
   TASK_EXPIRY_TIME: 60000,          // ms before despawn
   TASK_EXPIRY_STRESS: 2,            // % stress on expiry
+  TASK_EXPIRY_STRESS_CAP: 20,      // max % stress from expiry in any rolling window
+  TASK_EXPIRY_STRESS_CAP_WINDOW: 5000, // ms rolling window for expiry stress cap
 
   // === TASK XP ===
   TASK_XP_SINGLE_BASE: 20,         // +5 per tier
@@ -1003,16 +1010,16 @@ export default {
   STRESS_MEETING_BLOCK: 3,         // instant %
   STRESS_DECOY_PICKUP: 4,          // instant % (was 2 — doubled to punish decoy mistakes)
   STRESS_PASSIVE_DECAY_THRESHOLD: 50, // % stress above which passive decay kicks in
-  STRESS_PASSIVE_DECAY_RATE: 0.5,     // %/sec base passive decay
-  STRESS_BALL_DECAY_BONUS: 1.0,       // extra %/sec from Stress Ball upgrade
+  STRESS_PASSIVE_DECAY_RATE: 0.65,    // %/sec base passive decay (was 0.5 — raised so Stress Ball isn't mandatory)
+  STRESS_BALL_DECAY_BONUS: 0.35,     // extra %/sec from Stress Ball upgrade (was 0.5 — nice-to-have, not required)
   STRESS_VISUAL_YELLOW: 40,        // threshold %
   STRESS_VISUAL_ORANGE: 65,
   STRESS_VISUAL_RED: 85,
 
   // === CHAOS AGENTS: SHARED ===
   AGENT_ARRIVAL_THRESHOLD: 8,           // px — distance to consider "arrived" at target
-  AGENT_STUCK_THRESHOLD: 2,             // px — distance moved below which agent is "stuck"
-  AGENT_STUCK_CHECK_INTERVAL: 500,      // ms between stuck checks
+  AGENT_STUCK_THRESHOLD: 4,             // px — distance moved below which agent is "stuck" (was 2)
+  AGENT_STUCK_CHECK_INTERVAL: 1000,     // ms between stuck checks (was 500)
   AGENT_STUCK_IDLE_DURATION: 500,       // ms to idle when stuck before retrying
   AGENT_PERPENDICULAR_SPEED_FACTOR: 0.5, // secondary axis speed when navigating around obstacles
   AGENT_WANDER_DIR_CHANGE_MIN: 2000,    // ms min between wander direction changes
@@ -1020,7 +1027,7 @@ export default {
   AGENT_SPEECH_INTERVAL_MIN: 12000,     // ms min between periodic speech bubbles
   AGENT_SPEECH_INTERVAL_MAX: 20000,     // ms max between periodic speech bubbles
   AGENT_STUCK_MAX_RETRIES: 3,            // nudge attempts before calling onStuck()
-  AGENT_STUCK_NUDGE_DURATION: 400,      // ms to move perpendicular when stuck
+  AGENT_STUCK_NUDGE_DURATION: 1200,     // ms to move perpendicular when stuck (was 400)
   AGENT_SPEECH_DURATION: 3000,          // ms speech bubble stays visible
   AGENT_INFO_PANEL_DURATION: 3000,      // ms info panel stays visible on first spawn
   AGENT_WANDER_STUCK_THRESHOLD: 1.5,    // px — per-frame movement below this = stuck
@@ -1038,8 +1045,10 @@ export default {
   REPLYALL_TASK_BURST: 4,              // was 3 — more pressure per burst
   REPLYALL_COOLDOWN: 8000,             // was 10000 — more frequent bursts
   REPLYALL_TASK_XP_MULT: 0.5,         // 50% XP for Reply-All "junk mail" tasks
-  REPLYALL_TASK_EXPIRY_TIME: 30000,    // ms — half normal expiry for junk mail
-  REPLYALL_TASK_EXPIRY_STRESS: 4,      // % stress on junk mail expiry (doubled)
+  REPLYALL_TASK_EXPIRY_TIME: 20000,    // ms — shorter window to decide (was 30000)
+  REPLYALL_TASK_EXPIRY_STRESS: 6,      // % stress on junk mail expiry (was 4 — 24% total if full burst ignored)
+  REPLYALL_CHAIN_WINDOW: 10000,        // ms — deliver 2+ junk tasks within this window for full XP
+  REPLYALL_CHAIN_XP_MULT: 1.0,        // XP multiplier for 2nd+ junk task in chain (full XP)
   REPLYALL_OVERCAP: 2,                 // tasks allowed above TASK_MAX_ON_MAP
   REPLYALL_MIN_SPAWN_DIST: 160,              // px from player (5 tiles)
   REPLYALL_PAUSE_DURATION: 1000,              // ms pause at desk before bursting
@@ -1057,6 +1066,7 @@ export default {
   CHATTY_SPEED: 75,
   CHATTY_FREEZE_DURATION: 2500,
   CHATTY_COOLDOWN: 6000,
+  CHATTY_FREEZE_IMMUNITY_WINDOW: 2000,        // ms — immunity after any freeze ends (prevents chain-freezing)
   CHATTY_FREEZE_OVERLAP_DIST: 24,             // px — overlap distance to trigger freeze
   CHATTY_WALK_AWAY_DURATION: 2000,            // ms to walk away after freezing
 
@@ -1068,6 +1078,31 @@ export default {
   SLACKPINGER_AURA_RANGE: 120,         // px — stress aura radius
   SLACKPINGER_AURA_STRESS_RATE: 0.8,   // %/sec stress while player in aura
 
+  // === CHAOS AGENTS: ENRAGE ===
+  // After enrageTime minutes since spawn, agents escalate once
+  ENRAGE_MICROMANAGER_TIME: 180000,       // 3 min after spawn
+  ENRAGE_MICROMANAGER_RANGE: 128,         // px (was 96)
+  ENRAGE_MICROMANAGER_STRESS_RATE: 0.5,   // %/sec (was 0.3)
+  ENRAGE_REPLYALL_TIME: 120000,           // 2 min after spawn
+  ENRAGE_REPLYALL_BURST: 6,              // tasks per burst (was 4)
+  ENRAGE_MEETING_TIME: 120000,            // 2 min after spawn
+  ENRAGE_MEETING_MAX_BLOCKS: 2,           // can block 2 depts simultaneously
+  ENRAGE_CHATTY_TIME: 90000,              // 90s after spawn
+  ENRAGE_CHATTY_FREEZE_DURATION: 3500,    // ms (was 2500)
+  ENRAGE_CHATTY_COOLDOWN: 4000,           // ms (was 6000)
+  ENRAGE_SLACKPINGER_TIME: 120000,        // 2 min after spawn
+  ENRAGE_SLACKPINGER_DECOY_INTERVAL: 3000, // ms (was 5000)
+  ENRAGE_SLACKPINGER_AURA_RANGE: 160,     // px (was 120)
+
+  // === PRESSURE BONUS ===
+  PRESSURE_AGENT_RANGE: 128,          // px — agent within this range during delivery
+  PRESSURE_AGENT_XP_BONUS: 0.5,       // +50% XP
+  PRESSURE_STRESS_THRESHOLD: 65,       // % stress above which bonus applies
+  PRESSURE_STRESS_XP_BONUS: 0.25,     // +25% XP
+  PRESSURE_HOT_ZONE_XP_BONUS: 0.75,   // +75% XP for recently-unblocked dept
+  PRESSURE_HOT_ZONE_DURATION: 30000,   // ms duration of hot zone after dept unblock
+  PRESSURE_MAX_MULTIPLIER: 3.0,        // cap total pressure multiplier
+
   // === UPGRADE TUNING ===
   CORNER_OFFICE_AUTO_DELIVER_RANGE: 80,  // px
   FAST_TRACKER_STRESS_RELIEF: 3,         // % stress relief per skip
@@ -1075,7 +1110,8 @@ export default {
   DEPT_FAVORITE_RELIEF_MULT: 2.0,
   MEETING_BLOCKER_DURATION_MULT: 0.5,
   MEETING_BLOCKER_BLOCKED_XP_MULT: 0.75,
-  EXECUTIVE_PRESENCE_SLOW_FACTOR: 0.7,
+  EXECUTIVE_PRESENCE_SLOW_FACTOR: 0.6,  // agents at 60% speed when EP active (delivery-triggered)
+  EXECUTIVE_PRESENCE_DURATION: 8000,    // ms duration of delivery-triggered agent slow
 
   // === ASSISTANT ===
   ASSISTANT_SPEED: 80,
@@ -1086,7 +1122,7 @@ export default {
   ASSISTANT_FETCH_TIMEOUT: 15000,          // ms before giving up on fetch
   ASSISTANT_DELIVER_TIMEOUT: 20000,        // ms before force-completing delivery
   ASSISTANT_SEEK_DELAY: 5000,              // ms between task seek attempts
-  ASSISTANT_DELIVERY_INTERVAL: 45000,      // ms between delivery cycles
+  ASSISTANT_DELIVERY_INTERVAL: 30000,      // ms between delivery cycles (was 45000 — 45s too slow to feel useful)
   ASSISTANT_STUCK_CHECK_INTERVAL: 2000,    // ms between stuck checks
   ASSISTANT_STUCK_MOVE_THRESHOLD: 8,       // px — distance below which assistant is "stuck"
 
@@ -1100,9 +1136,10 @@ export default {
     CEO:       { minLevel: 9, maxLevel: 9 },
   },
   TIER_ORDER: ['INTERN', 'ASSOCIATE', 'MANAGER', 'DIRECTOR', 'CEO'],
-  POST_CEO_MILESTONE_XP_BASE: 400,           // first post-CEO milestone cost
-  POST_CEO_MILESTONE_XP_INCREMENT: 200,       // each subsequent milestone costs this much more
-  MILESTONE_STRESS_DECAY_BONUS: 0.3,          // permanent %/sec passive decay per milestone
+  POST_CEO_MILESTONE_XP_BASE: 300,           // first post-CEO milestone cost (was 400)
+  POST_CEO_MILESTONE_XP_INCREMENT: 100,       // each subsequent costs this much more (was 200)
+  MILESTONE_XP_MULTIPLIER_BONUS: 0.5,         // +0.5x XP multiplier per milestone (was: stress decay)
+  MILESTONE_IPO_BELL: 3,                       // milestone number that triggers IPO Bell celebration
 
   // === TIMER ===
   TIMER_WARNING_ORANGE: 120,   // seconds remaining
@@ -1117,14 +1154,42 @@ export default {
   TASK_PULSE_DURATION: 800,            // ms half-cycle for pulse tween
   TASK_GLOW_ALPHA: 0.25,              // opacity of glow halo behind task icon
   FLOATING_TEXT_MAX_LENGTH: 45,        // truncate floating text beyond this
-  FLOATING_TEXT_DURATION: 2500,        // ms before fade-out
+  FLOATING_TEXT_DURATION: 3000,        // ms before fade-out (was 2500)
   FLOATING_TEXT_FONT_SIZE: '12px',     // pickup popup size
   TASK_STRIP_MAX_NAME_LENGTH: 70,      // chars before truncation in bottom strip
 
   // === HUD ===
   HUD_MAX_TASK_SLOTS: 4,              // max task info lines (matches max carry capacity with Extra Hands)
+  HUD_BADGE_WIDTH: 34,                // px — task badge width in top bar
+  HUD_BADGE_HEIGHT: 12,               // px — task badge height in top bar
+  HUD_BADGE_GAP: 3,                   // px — gap between task badges
   STAMINA_LOW_THRESHOLD: 0.2,          // ratio — stamina bar turns red
   STAMINA_WARN_THRESHOLD: 0.4,         // ratio — stamina bar turns yellow
+
+  // === TOASTS ===
+  TOAST_DURATION: 4000,                // ms hold time
+  TOAST_FADE_IN: 300,                  // ms
+  TOAST_FADE_OUT: 500,                 // ms
+  SPRINT_HINT_STRESS_THRESHOLD: 50,    // % stress to trigger sprint hint
+  TUTORIAL_IDLE_DELAY: 3000,           // ms before showing move hint for idle players
+
+  // === SOUND PROMPT ===
+  SOUND_PROMPT_DELAY: 5000,            // ms after game start before sound prompt
+
+  // === WATER COOLER ===
+  WATER_COOLER_STRESS_RELIEF: 8,       // % stress reduced on use
+  WATER_COOLER_STAMINA_RESTORE: 20,    // stamina points restored on use
+  WATER_COOLER_COOLDOWN: 20000,        // ms before it can be used again
+  WATER_COOLER_POSITIONS: [
+    { x: 37, y: 4 },   // Break Room area (upper-right)
+    { x: 20, y: 7 },   // Center-top corridor (high visibility)
+    { x: 20, y: 19 },  // Center-south corridor (covers bottom half of map)
+  ],
+
+  // === SHARE ===
+  SHARE_CARD_WIDTH: 1200,
+  SHARE_CARD_HEIGHT: 630,
+  SHARE_URL: 'https://rohitgarrg.com/projects/office-survivors',
 
   // === LEVEL UP ===
   PROMOTION_POPUP_DURATION: 2000,              // ms to show "PROMOTED!" text
@@ -1139,6 +1204,12 @@ export default {
   CAMERA_LERP: 0.08,
   CAMERA_DEADZONE_WIDTH: 200,
   CAMERA_DEADZONE_HEIGHT: 150,
+
+  // === MOBILE ===
+  MOBILE_TAP_MARKER_DURATION: 500,     // ms tap destination marker visible
+  MOBILE_SPRINT_HOLD_THRESHOLD: 200,   // ms before long-press triggers sprint
+  MOBILE_PAUSE_BUTTON_SIZE: 32,        // game px
+  MOBILE_PAUSE_HIT_SIZE: 48,           // game px (larger touch target)
 
   // === TASK TIER SELECTION WEIGHTS ===
   TASK_TIER_WEIGHT_CURRENT: 0.6,
@@ -1185,7 +1256,7 @@ export default {
 - 5-tier career progression with evolving tasks
 - Multi-stop (2 and 3) task mechanic
 - 5 chaos agents with distinct behaviors
-- 14 upgrades, tier-gated
+- 15 upgrades, tier-gated
 - Task expiry mechanic
 - Desktop keyboard controls
 - Stress system with visual feedback

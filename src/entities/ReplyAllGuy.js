@@ -45,6 +45,19 @@ export class ReplyAllGuy extends ChaosAgent {
 
     /** @type {number} Cooldown time remaining */
     this._cooldownTimer = 0;
+
+    // Enrage: 2 min after spawn — larger burst size
+    this.enrageTime = CONFIG.ENRAGE_REPLYALL_TIME;
+  }
+
+  /** Escalate stats on enrage */
+  onEnrage() {
+    console.debug('[ReplyAllGuy] enraged: burst size increased');
+  }
+
+  /** Get current burst count (enraged = more tasks) */
+  getBurstCount() {
+    return this.isEnraged ? CONFIG.ENRAGE_REPLYALL_BURST : CONFIG.REPLYALL_TASK_BURST;
   }
 
   /** Walk to desk, pause, burst tasks, repeat */
@@ -160,7 +173,7 @@ export class ReplyAllGuy extends ChaosAgent {
     let spawned = 0;
     const deptIds = Object.keys(DEPARTMENT_COLORS);
 
-    for (let i = 0; i < CONFIG.REPLYALL_TASK_BURST; i++) {
+    for (let i = 0; i < this.getBurstCount(); i++) {
       // Allow overcap: Reply-All can push 2 tasks above the normal cap
       const overcapLimit = CONFIG.TASK_MAX_ON_MAP + CONFIG.REPLYALL_OVERCAP;
       if (taskManager.getActiveCount() >= overcapLimit) {

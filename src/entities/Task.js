@@ -89,6 +89,13 @@ export class Task extends Phaser.GameObjects.Sprite {
     this._flashTimer = 0;
     this.setDepth(8); // Above furniture (3) but below player (10)
 
+    // Subtle visual tell for Reply-All junk tasks (slightly desaturated)
+    if (this.isReplyAll) {
+      this.setTint(0xccccff); // faint blue-grey tint — noticeable if you look for it
+    } else {
+      this.clearTint();
+    }
+
     // Enable physics body if it exists
     if (this.body) {
       this.body.enable = true;
@@ -136,6 +143,7 @@ export class Task extends Phaser.GameObjects.Sprite {
     this.spawnTime = 0;
     this.isDecoy = false;
     this.isReplyAll = false;
+    this.clearTint();
 
     if (this.body) {
       this.body.enable = false;
