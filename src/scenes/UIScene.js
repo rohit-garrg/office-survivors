@@ -248,16 +248,16 @@ export class UIScene extends Phaser.Scene {
           !this._hasEverSprinted &&
           data.percent >= CONFIG.SPRINT_HINT_STRESS_THRESHOLD) {
         this._hasShownSprintHint = true;
-        const sprintMsg = isTouchDevice() ? 'Hold to sprint!' : 'Hold SHIFT to sprint!';
+        const sprintMsg = isTouchDevice() ? 'Hold the RUN button to sprint!' : 'Hold SHIFT to sprint!';
         this.toast.show(sprintMsg);
       }
     };
     gameScene.events.on('stress-changed', this._onStressForHint);
 
-    // === Tap-to-move onboarding toast for touch devices ===
+    // === Mobile onboarding toast ===
     if (isTouchDevice()) {
       gameScene.time.delayedCall(2000, () => {
-        this.toast.show('Tap anywhere to move. Hold to sprint!');
+        this.toast.show('Use the joystick to move. Hold RUN to sprint!');
       });
     }
 

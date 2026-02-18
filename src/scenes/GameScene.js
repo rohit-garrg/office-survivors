@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import CONFIG from '../config/gameConfig.js';
-import { DEPARTMENTS, OBSTACLES, ROOM_WALLS, PLAYER_START } from '../config/mapData.js';
+import { DEPARTMENTS, OBSTACLES, ROOM_WALLS, PLAYER_START, DEPARTMENT_ABBREV } from '../config/mapData.js';
 import { Player } from '../entities/Player.js';
 import { TASK_STATES } from '../entities/Task.js';
 import { TaskManager } from '../systems/TaskManager.js';
@@ -168,9 +168,13 @@ export class GameScene extends Phaser.Scene {
 
     // Set up touch input if device supports it (after soundManager so mute button works)
     if (isTouchDevice()) {
-      this.player.initTouchInput();
+      this.createMobileJoystick();
+      this.createMobileSprintButton();
       this.createMobilePauseButton();
       this.createMobileMuteButton();
+      this.createDepartmentIndicators();
+      this.player.useTouchInput = true;
+      this.player.useJoystickInput = true;
     }
 
     // Create vignette overlay (4 edge rectangles, hidden by default)
@@ -227,6 +231,11 @@ export class GameScene extends Phaser.Scene {
 
     // Check water cooler interaction
     this.checkWaterCooler();
+
+    // Update mobile department indicators
+    if (this.deptIndicators) {
+      this.updateDepartmentIndicators();
+    }
 
     // Game timer
     this._timerAccumulator += delta;
@@ -732,11 +741,20 @@ export class GameScene extends Phaser.Scene {
     this.taskGroup = this.physics.add.group();
   }
 
-  /** Set up camera: zoom to show entire map, centered (no follow) */
+  /** Set up camera: zoomed follow on mobile, full-map static on desktop */
   setupCamera() {
     const cam = this.cameras.main;
-    cam.setZoom(CONFIG.CAMERA_ZOOM);
-    cam.centerOn(this.mapWidth / 2, this.mapHeight / 2);
+    if (isTouchDevice()) {
+      cam.setZoom(CONFIG.MOBILE_CAMERA_ZOOM);
+      cam.setBounds(0, 0, this.mapWidth, this.mapHeight);
+      cam.startFollow(this.player, true,
+        CONFIG.MOBILE_CAMERA_LERP, CONFIG.MOBILE_CAMERA_LERP);
+      cam.setDeadzone(CONFIG.MOBILE_CAMERA_DEADZONE_WIDTH,
+        CONFIG.MOBILE_CAMERA_DEADZONE_HEIGHT);
+    } else {
+      cam.setZoom(CONFIG.CAMERA_ZOOM);
+      cam.centerOn(this.mapWidth / 2, this.mapHeight / 2);
+    }
   }
 
   /** Register keyboard input handlers */
@@ -1255,6 +1273,133 @@ export class GameScene extends Phaser.Scene {
     };
   }
 
+  /** Create virtual joystick for mobile (bottom-left) */
+  createMobileJoystick() {
+    const baseX = CONFIG.MOBILE_JOYSTICK_X;
+    const baseY = CONFIG.CANVAS_HEIGHT + CONFIG.MOBILE_JOYSTICK_Y_OFFSET;
+    const baseRadius = CONFIG.MOBILE_JOYSTICK_BASE_RADIUS;
+    const thumbRadius = CONFIG.MOBILE_JOYSTICK_THUMB_RADIUS;
+    const maxDist = CONFIG.MOBILE_JOYSTICK_MAX_DISTANCE;
+    const deadzone = maxDist * 0.15;
+
+    // Outer ring (base)
+    const base = this.add.circle(baseX, baseY, baseRadius, 0xffffff, CONFIG.MOBILE_JOYSTICK_BASE_ALPHA)
+      .setScrollFactor(0).setDepth(450);
+
+    // Inner thumb
+    const thumb = this.add.circle(baseX, baseY, thumbRadius, 0xffffff, CONFIG.MOBILE_JOYSTICK_THUMB_ALPHA)
+      .setScrollFactor(0).setDepth(451);
+
+    // Invisible hit zone (larger for easier finger acquisition)
+    const hitZone = this.add.circle(baseX, baseY, baseRadius + 20, 0x000000, 0)
+      .setScrollFactor(0).setDepth(452)
+      .setInteractive();
+
+    // Joystick state
+    this.joystick = {
+      base, thumb, hitZone,
+      baseX, baseY,
+      dirX: 0,
+      dirY: 0,
+      active: false,
+      pointerId: null,
+    };
+
+    hitZone.on('pointerdown', (pointer) => {
+      this.joystick.active = true;
+      this.joystick.pointerId = pointer.id;
+      this._updateJoystickThumb(pointer);
+    });
+
+    this.input.on('pointermove', (pointer) => {
+      if (!this.joystick.active || pointer.id !== this.joystick.pointerId) return;
+      this._updateJoystickThumb(pointer);
+    });
+
+    this.input.on('pointerup', (pointer) => {
+      if (!this.joystick.active || pointer.id !== this.joystick.pointerId) return;
+      this.joystick.active = false;
+      this.joystick.pointerId = null;
+      this.joystick.dirX = 0;
+      this.joystick.dirY = 0;
+      thumb.setPosition(baseX, baseY);
+    });
+  }
+
+  /** Update joystick thumb position and direction from pointer */
+  _updateJoystickThumb(pointer) {
+    const js = this.joystick;
+    const maxDist = CONFIG.MOBILE_JOYSTICK_MAX_DISTANCE;
+    const deadzone = maxDist * 0.15;
+
+    const dx = pointer.x - js.baseX;
+    const dy = pointer.y - js.baseY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist < deadzone) {
+      // Inside deadzone — no movement
+      js.dirX = 0;
+      js.dirY = 0;
+      js.thumb.setPosition(js.baseX + dx, js.baseY + dy);
+    } else if (dist > maxDist) {
+      // Clamp to max distance
+      const nx = dx / dist;
+      const ny = dy / dist;
+      js.thumb.setPosition(js.baseX + nx * maxDist, js.baseY + ny * maxDist);
+      js.dirX = nx;
+      js.dirY = ny;
+    } else {
+      // Normal range — set thumb and normalize direction
+      js.thumb.setPosition(js.baseX + dx, js.baseY + dy);
+      js.dirX = dx / dist;
+      js.dirY = dy / dist;
+    }
+  }
+
+  /** Create sprint button for mobile (bottom-right) */
+  createMobileSprintButton() {
+    const btnX = CONFIG.CANVAS_WIDTH + CONFIG.MOBILE_SPRINT_BTN_X_OFFSET;
+    const btnY = CONFIG.CANVAS_HEIGHT + CONFIG.MOBILE_SPRINT_BTN_Y_OFFSET;
+    const radius = CONFIG.MOBILE_SPRINT_BTN_RADIUS;
+
+    // Gold circle
+    const circle = this.add.circle(btnX, btnY, radius, 0xFFD700, CONFIG.MOBILE_SPRINT_BTN_ALPHA)
+      .setScrollFactor(0).setDepth(450);
+
+    // "RUN" label
+    const label = this.add.text(btnX, btnY, 'RUN', {
+      fontSize: '13px',
+      fontFamily: 'monospace',
+      fontStyle: 'bold',
+      color: '#000000',
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(451);
+
+    // Invisible hit zone (larger)
+    const hitZone = this.add.circle(btnX, btnY, radius + 15, 0x000000, 0)
+      .setScrollFactor(0).setDepth(452)
+      .setInteractive();
+
+    this.sprintButton = {
+      circle, label, hitZone,
+      active: false,
+      pointerId: null,
+    };
+
+    hitZone.on('pointerdown', (pointer) => {
+      this.sprintButton.active = true;
+      this.sprintButton.pointerId = pointer.id;
+      circle.setAlpha(CONFIG.MOBILE_SPRINT_BTN_ACTIVE_ALPHA);
+    });
+
+    this.input.on('pointerup', (pointer) => {
+      if (this.sprintButton.pointerId !== null && pointer.id === this.sprintButton.pointerId) {
+        this.sprintButton.active = false;
+        this.sprintButton.pointerId = null;
+        circle.setAlpha(CONFIG.MOBILE_SPRINT_BTN_ALPHA);
+      }
+    });
+  }
+
   /** Create a visible pause button for mobile (top-right corner) */
   createMobilePauseButton() {
     const hitSize = CONFIG.MOBILE_PAUSE_HIT_SIZE;
@@ -1309,6 +1454,142 @@ export class GameScene extends Phaser.Scene {
     this.mobileMuteBtn = { hitArea, bgCircle, icon };
   }
 
+  /** Create off-screen department direction indicators for mobile */
+  createDepartmentIndicators() {
+    const ts = CONFIG.TILE_SIZE;
+    this.deptIndicators = [];
+
+    for (const dept of DEPARTMENTS) {
+      // Department center in world coordinates
+      const worldX = (dept.position.x + dept.size.width / 2) * ts;
+      const worldY = (dept.position.y + dept.size.height / 2) * ts;
+      const color = parseInt(dept.color.replace('#', ''), 16);
+      const abbrev = DEPARTMENT_ABBREV[dept.id] || dept.id;
+
+      // Triangle pointing right (will be rotated toward department)
+      const gfx = this.add.graphics().setScrollFactor(0).setDepth(300);
+      const sz = CONFIG.MOBILE_DEPT_INDICATOR_SIZE;
+      gfx.fillStyle(color, 1);
+      gfx.fillTriangle(sz, 0, -sz * 0.6, -sz * 0.7, -sz * 0.6, sz * 0.7);
+      gfx.lineStyle(1.5, 0xffffff, 0.8);
+      gfx.strokeTriangle(sz, 0, -sz * 0.6, -sz * 0.7, -sz * 0.6, sz * 0.7);
+
+      // Abbreviation label
+      const label = this.add.text(0, 0, abbrev, {
+        fontSize: '10px',
+        fontFamily: 'monospace',
+        fontStyle: 'bold',
+        color: '#ffffff',
+        stroke: '#000000',
+        strokeThickness: 2,
+      }).setOrigin(0.5).setScrollFactor(0).setDepth(301);
+
+      // Container holds both
+      const container = this.add.container(0, 0, [gfx, label])
+        .setScrollFactor(0).setDepth(300).setVisible(false);
+
+      this.deptIndicators.push({
+        container, gfx, label,
+        worldX, worldY,
+        deptId: dept.id,
+        color,
+        pulseTween: null,
+        isPulsing: false,
+      });
+    }
+  }
+
+  /** Update off-screen department indicators each frame */
+  updateDepartmentIndicators() {
+    const cam = this.cameras.main;
+    const view = cam.worldView;
+    const margin = CONFIG.MOBILE_DEPT_INDICATOR_MARGIN;
+    const screenW = CONFIG.CANVAS_WIDTH;
+    const screenH = CONFIG.CANVAS_HEIGHT;
+
+    // Determine which departments the player's carried tasks need
+    const neededDepts = new Set();
+    if (this.player && this.player.inventory) {
+      for (const task of this.player.inventory) {
+        if (task.isDecoy) continue;
+        const dept = task.getCurrentDepartment();
+        if (dept) neededDepts.add(dept);
+      }
+    }
+
+    for (const ind of this.deptIndicators) {
+      // Check if department center is within camera view
+      const inView = view.contains(ind.worldX, ind.worldY);
+
+      if (inView) {
+        ind.container.setVisible(false);
+        this._stopIndicatorPulse(ind);
+        continue;
+      }
+
+      ind.container.setVisible(true);
+
+      // Calculate angle from camera center to department
+      const camCenterX = view.x + view.width / 2;
+      const camCenterY = view.y + view.height / 2;
+      const angle = Math.atan2(ind.worldY - camCenterY, ind.worldX - camCenterX);
+
+      // Rotate indicator triangle to point toward department
+      ind.gfx.setRotation(angle);
+      // Counter-rotate label so text stays upright
+      ind.label.setRotation(-angle);
+
+      // Project from screen center along angle to screen edge
+      const halfW = screenW / 2 - margin;
+      const halfH = screenH / 2 - margin;
+
+      // Ray-rect intersection: find t where ray hits edge
+      const cos = Math.cos(angle);
+      const sin = Math.sin(angle);
+      let t = Infinity;
+      if (cos !== 0) t = Math.min(t, Math.abs(halfW / cos));
+      if (sin !== 0) t = Math.min(t, Math.abs(halfH / sin));
+
+      const sx = screenW / 2 + cos * t;
+      const sy = screenH / 2 + sin * t;
+
+      // Clamp within screen bounds with margin
+      const cx = Phaser.Math.Clamp(sx, margin, screenW - margin);
+      const cy = Phaser.Math.Clamp(sy, margin, screenH - margin);
+      ind.container.setPosition(cx, cy);
+
+      // Pulse if department matches a carried task destination
+      const isNeeded = neededDepts.has(ind.deptId);
+      if (isNeeded && !ind.isPulsing) {
+        ind.isPulsing = true;
+        ind.pulseTween = this.tweens.add({
+          targets: ind.container,
+          alpha: { from: 1, to: 0.3 },
+          duration: CONFIG.MOBILE_DEPT_INDICATOR_PULSE_MS,
+          yoyo: true,
+          repeat: -1,
+        });
+      } else if (!isNeeded && ind.isPulsing) {
+        this._stopIndicatorPulse(ind);
+      }
+
+      // Non-task departments shown dimmer
+      if (!isNeeded) {
+        ind.container.setAlpha(0.7);
+      }
+    }
+  }
+
+  /** Stop pulse tween on a department indicator */
+  _stopIndicatorPulse(ind) {
+    if (ind.pulseTween) {
+      ind.pulseTween.stop();
+      ind.pulseTween = null;
+    }
+    ind.isPulsing = false;
+    ind.container.setAlpha(1);
+  }
+
   /** Handle pause/resume */
   togglePause() {
     if (this.isGameOver) return;
@@ -1317,6 +1598,21 @@ export class GameScene extends Phaser.Scene {
 
     if (this.isPaused) {
       this.physics.pause();
+      // Reset joystick and sprint button on pause
+      if (this.joystick) {
+        this.joystick.active = false;
+        this.joystick.pointerId = null;
+        this.joystick.dirX = 0;
+        this.joystick.dirY = 0;
+        this.joystick.thumb.setPosition(this.joystick.baseX, this.joystick.baseY);
+      }
+      if (this.sprintButton) {
+        this.sprintButton.active = false;
+        this.sprintButton.pointerId = null;
+        if (this.sprintButton.circle) {
+          this.sprintButton.circle.setAlpha(CONFIG.MOBILE_SPRINT_BTN_ALPHA);
+        }
+      }
       this.showPauseOverlay();
     } else {
       this.physics.resume();
@@ -1590,6 +1886,31 @@ export class GameScene extends Phaser.Scene {
     // Orientation handler cleanup
     if (this._orientationHandler) {
       window.removeEventListener('resize', this._orientationHandler);
+    }
+
+    // Mobile joystick cleanup
+    if (this.joystick) {
+      this.joystick.base.destroy();
+      this.joystick.thumb.destroy();
+      this.joystick.hitZone.destroy();
+      this.joystick = null;
+    }
+
+    // Mobile sprint button cleanup
+    if (this.sprintButton) {
+      this.sprintButton.circle.destroy();
+      this.sprintButton.label.destroy();
+      this.sprintButton.hitZone.destroy();
+      this.sprintButton = null;
+    }
+
+    // Department indicator cleanup
+    if (this.deptIndicators) {
+      for (const ind of this.deptIndicators) {
+        if (ind.pulseTween) ind.pulseTween.stop();
+        ind.container.destroy();
+      }
+      this.deptIndicators = null;
     }
 
     if (this.taskManager) this.taskManager.destroy();

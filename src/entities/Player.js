@@ -92,6 +92,9 @@ export class Player extends Phaser.GameObjects.Sprite {
 
     /** @type {boolean} Whether this player uses touch input */
     this.useTouchInput = false;
+
+    /** @type {boolean} Whether this player uses joystick input (overrides tap-to-move) */
+    this.useJoystickInput = false;
   }
 
   /** Set up physics body, paper stack, and add to scene */
@@ -144,7 +147,9 @@ export class Player extends Phaser.GameObjects.Sprite {
 
     this.handleSprint(delta);
 
-    if (this.useTouchInput && this.moveTarget) {
+    if (this.useJoystickInput) {
+      this.handleJoystickMovement();
+    } else if (this.useTouchInput && this.moveTarget) {
       this.handleTouchMovement();
     } else if (!this.useTouchInput) {
       this.handleMovement();
@@ -299,9 +304,14 @@ export class Player extends Phaser.GameObjects.Sprite {
   /** Handle sprint: drain/regen stamina */
   handleSprint(delta) {
     const deltaSeconds = delta / 1000;
-    const isSprinting = this.useTouchInput
-      ? this.touchSprinting
-      : this.scene.shiftKey.isDown;
+    let isSprinting;
+    if (this.useJoystickInput) {
+      isSprinting = this.scene.sprintButton?.active ?? false;
+    } else if (this.useTouchInput) {
+      isSprinting = this.touchSprinting;
+    } else {
+      isSprinting = this.scene.shiftKey.isDown;
+    }
 
     if (isSprinting && this.stamina > 0 && !CONFIG.DEBUG.INFINITE_STAMINA) {
       this.isSprinting = true;
@@ -373,6 +383,30 @@ export class Player extends Phaser.GameObjects.Sprite {
       duration: CONFIG.MOBILE_TAP_MARKER_DURATION,
       onComplete: () => marker.destroy(),
     });
+  }
+
+  /** Handle movement from virtual joystick */
+  handleJoystickMovement() {
+    const js = this.scene.joystick;
+    if (!js || !js.active || (js.dirX === 0 && js.dirY === 0)) {
+      this.body.setVelocity(0, 0);
+      this.updateAnimation(0, 0);
+      return;
+    }
+
+    let speed = this.currentSpeed;
+    if (this.isSprinting && this.stamina > 0) {
+      speed *= CONFIG.PLAYER_SPRINT_MULTIPLIER;
+    }
+
+    // Apply normalized joystick direction
+    const velocity = normalizeVelocity(js.dirX, js.dirY, speed);
+    this.body.setVelocity(velocity.x, velocity.y);
+
+    // Convert continuous direction to -1/0/1 for animation
+    const vx = js.dirX > 0.3 ? 1 : js.dirX < -0.3 ? -1 : 0;
+    const vy = js.dirY > 0.3 ? 1 : js.dirY < -0.3 ? -1 : 0;
+    this.updateAnimation(vx, vy);
   }
 
   /** Move toward tap target */
