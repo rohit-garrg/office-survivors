@@ -31,7 +31,7 @@ export class HUD {
   /** Create all HUD elements */
   create() {
     // === FULL-WIDTH TOP BAR ===
-    this.topBar = this.scene.add.rectangle(0, 0, 960, 34, 0x000000, 0.55)
+    this.topBar = this.scene.add.rectangle(0, 0, CONFIG.CANVAS_WIDTH, 34, 0x000000, 0.55)
       .setOrigin(0, 0).setScrollFactor(0).setDepth(199);
 
     // === LEVEL / XP SECTION (x=8) ===
@@ -87,19 +87,20 @@ export class HUD {
       this.taskBadges.push({ bg, label });
     }
 
-    // === STRESS SECTION (x=575) ===
-    this.stressLabel = this.scene.add.text(575, 5, 'STRESS', {
+    // === STRESS SECTION (right-aligned, 385px from right edge) ===
+    const stressX = CONFIG.CANVAS_WIDTH - 385;
+    this.stressLabel = this.scene.add.text(stressX, 5, 'STRESS', {
       fontSize: '11px',
       fontFamily: 'monospace',
       color: '#cccccc',
       fontStyle: 'bold',
     }).setScrollFactor(0).setDepth(200);
 
-    this.stressBarBg = this.scene.add.rectangle(620, 5, 130, 14, 0x555555)
+    this.stressBarBg = this.scene.add.rectangle(stressX + 45, 5, 130, 14, 0x555555)
       .setOrigin(0, 0).setScrollFactor(0).setDepth(200);
-    this.stressBarFill = this.scene.add.rectangle(620, 5, 0, 14, 0x44aa44)
+    this.stressBarFill = this.scene.add.rectangle(stressX + 45, 5, 0, 14, 0x44aa44)
       .setOrigin(0, 0).setScrollFactor(0).setDepth(201);
-    this.stressText = this.scene.add.text(755, 5, '0%', {
+    this.stressText = this.scene.add.text(stressX + 180, 5, '0%', {
       fontSize: '12px',
       fontFamily: 'monospace',
       color: '#ffffff',
@@ -107,17 +108,18 @@ export class HUD {
     }).setOrigin(0, 0).setScrollFactor(0).setDepth(202);
 
     // Stress warning text (row 2, below label)
-    this.stressWarningText = this.scene.add.text(575, 22, '', {
+    this.stressWarningText = this.scene.add.text(stressX, 22, '', {
       fontSize: '9px',
       fontFamily: 'monospace',
       color: '#ff8800',
       fontStyle: 'italic',
     }).setScrollFactor(0).setDepth(200).setVisible(false);
 
-    // === TIMER SECTION (x=870) ===
-    this.timerBg = this.scene.add.rectangle(870, 3, 80, 28, 0x1a1a2e, 0.9)
+    // === TIMER SECTION (right-aligned, 90px from right edge) ===
+    const timerX = CONFIG.CANVAS_WIDTH - 90;
+    this.timerBg = this.scene.add.rectangle(timerX, 3, 80, 28, 0x1a1a2e, 0.9)
       .setOrigin(0, 0).setScrollFactor(0).setDepth(200);
-    this.timerText = this.scene.add.text(910, 7, formatTime(CONFIG.GAME_DURATION), {
+    this.timerText = this.scene.add.text(timerX + 40, 7, formatTime(CONFIG.GAME_DURATION), {
       fontSize: '18px',
       fontFamily: 'monospace',
       color: '#ffffff',
@@ -125,7 +127,7 @@ export class HUD {
     }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(201);
 
     // === BOTTOM TASK STRIP (full task names) ===
-    this.taskStripBg = this.scene.add.rectangle(80, 540, 800, 0, 0x000000, 0.5)
+    this.taskStripBg = this.scene.add.rectangle(80, CONFIG.CANVAS_HEIGHT, CONFIG.CANVAS_WIDTH - 160, 0, 0x000000, 0.5)
       .setOrigin(0, 1).setScrollFactor(0).setDepth(199).setVisible(false);
 
     this.taskStripRows = [];
@@ -265,7 +267,7 @@ export class HUD {
     // Show/resize background for bottom strip
     if (tasks.length > 0) {
       const panelHeight = tasks.length * rowHeight + 8;
-      this.taskStripBg.setSize(800, panelHeight).setVisible(true);
+      this.taskStripBg.setSize(CONFIG.CANVAS_WIDTH - 160, panelHeight).setVisible(true);
     } else {
       this.taskStripBg.setVisible(false);
     }
@@ -362,7 +364,7 @@ export class HUD {
     const deptName = deptId.charAt(0) + deptId.slice(1).toLowerCase();
 
     // Position below the stress section, stacking for multiple blocks
-    const baseX = 575;
+    const baseX = CONFIG.CANVAS_WIDTH - 385;
     const baseY = 38;
     const offsetY = this.blockedIndicators.size * 18;
 
@@ -395,7 +397,7 @@ export class HUD {
 
       // Reposition remaining indicators to close gaps
       let idx = 0;
-      const baseX = 575;
+      const baseX = CONFIG.CANVAS_WIDTH - 385;
       const baseY = 38;
       for (const [, container] of this.blockedIndicators) {
         container.setPosition(baseX, baseY + idx * 18);

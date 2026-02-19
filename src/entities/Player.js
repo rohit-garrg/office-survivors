@@ -317,6 +317,12 @@ export class Player extends Phaser.GameObjects.Sprite {
       this.isSprinting = true;
       this.stamina -= CONFIG.PLAYER_STAMINA_DRAIN * deltaSeconds;
       if (this.stamina < 0) this.stamina = 0;
+      // Periodic debug log (~once per second at 60fps)
+      if (!this._sprintLogCounter) this._sprintLogCounter = 0;
+      if (++this._sprintLogCounter >= 60) {
+        console.debug(`[Player] sprinting: stamina=${this.stamina.toFixed(1)}, speed=${CONFIG.PLAYER_SPEED}x${CONFIG.PLAYER_SPRINT_MULTIPLIER}`);
+        this._sprintLogCounter = 0;
+      }
     } else {
       this.isSprinting = false;
       if (this.stamina < CONFIG.PLAYER_STAMINA_MAX && !CONFIG.DEBUG.INFINITE_STAMINA) {

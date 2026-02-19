@@ -168,6 +168,7 @@ export class GameScene extends Phaser.Scene {
 
     // Set up touch input if device supports it (after soundManager so mute button works)
     if (isTouchDevice()) {
+      this.input.addPointer(1); // 3-pointer multi-touch (joystick + sprint + extra)
       this.createMobileJoystick();
       this.createMobileSprintButton();
       this.createMobilePauseButton();
@@ -1303,12 +1304,14 @@ export class GameScene extends Phaser.Scene {
     const maxDist = CONFIG.MOBILE_JOYSTICK_MAX_DISTANCE / zoom;
     const deadzone = maxDist * 0.15;
 
-    // Outer ring (base)
-    const base = this.add.circle(baseX, baseY, baseRadius, 0xffffff, CONFIG.MOBILE_JOYSTICK_BASE_ALPHA)
+    // Outer ring (base) — light cyan with outline for visibility on any background
+    const base = this.add.circle(baseX, baseY, baseRadius, 0xaaddff, CONFIG.MOBILE_JOYSTICK_BASE_ALPHA)
+      .setStrokeStyle(2 / zoom, 0x335577, 0.6)
       .setScrollFactor(0).setDepth(450);
 
     // Inner thumb
-    const thumb = this.add.circle(baseX, baseY, thumbRadius, 0xffffff, CONFIG.MOBILE_JOYSTICK_THUMB_ALPHA)
+    const thumb = this.add.circle(baseX, baseY, thumbRadius, 0xddeeff, CONFIG.MOBILE_JOYSTICK_THUMB_ALPHA)
+      .setStrokeStyle(1.5 / zoom, 0x335577, 0.8)
       .setScrollFactor(0).setDepth(451);
 
     // Invisible hit zone (larger for easier finger acquisition)
@@ -1422,6 +1425,9 @@ export class GameScene extends Phaser.Scene {
       this.sprintButton.active = true;
       this.sprintButton.pointerId = pointer.id;
       circle.setAlpha(CONFIG.MOBILE_SPRINT_BTN_ACTIVE_ALPHA);
+      // Visual feedback: green when sprinting
+      circle.setFillStyle(0x44ff44);
+      label.setColor('#115511');
     });
 
     this.input.on('pointerup', (pointer) => {
@@ -1429,6 +1435,9 @@ export class GameScene extends Phaser.Scene {
         this.sprintButton.active = false;
         this.sprintButton.pointerId = null;
         circle.setAlpha(CONFIG.MOBILE_SPRINT_BTN_ALPHA);
+        // Revert to gold
+        circle.setFillStyle(0xFFD700);
+        label.setColor('#000000');
       }
     });
   }

@@ -7,6 +7,7 @@ import { UIScene } from './scenes/UIScene.js';
 import { LevelUpScene } from './scenes/LevelUpScene.js';
 import { GameOverScene } from './scenes/GameOverScene.js';
 import { HowToPlayScene } from './scenes/HowToPlayScene.js';
+import { isTouchDevice } from './utils/helpers.js';
 
 // Sync #game-container height with actual visible viewport (excludes mobile URL bar)
 function syncContainerHeight() {
@@ -17,6 +18,15 @@ function syncContainerHeight() {
 }
 syncContainerHeight();
 window.addEventListener('resize', syncContainerHeight);
+
+// On mobile, stretch canvas width to match device aspect ratio (fills screen edge-to-edge)
+if (isTouchDevice()) {
+  const deviceAspect = window.innerWidth / window.innerHeight;
+  const stretchedWidth = Math.ceil(CONFIG.CANVAS_HEIGHT * deviceAspect);
+  // Clamp to reasonable range: never narrower than 16:9 (960), never wider than ~21:9 (1134)
+  CONFIG.CANVAS_WIDTH = Math.max(960, Math.min(stretchedWidth, 1134));
+  console.log(`[main] Mobile canvas stretched to ${CONFIG.CANVAS_WIDTH}x${CONFIG.CANVAS_HEIGHT} (device aspect ${deviceAspect.toFixed(2)})`);
+}
 
 const config = {
   type: Phaser.AUTO,
