@@ -1212,6 +1212,33 @@ export default {
   MOBILE_PAUSE_BUTTON_SIZE: 32,        // game px
   MOBILE_PAUSE_HIT_SIZE: 48,           // game px (larger touch target)
 
+  // Mobile camera
+  MOBILE_CAMERA_ZOOM: 1.6,            // ~1/4.5 of map visible
+  MOBILE_CAMERA_LERP: 0.1,
+  MOBILE_CAMERA_DEADZONE_WIDTH: 80,
+  MOBILE_CAMERA_DEADZONE_HEIGHT: 60,
+
+  // Virtual joystick (bottom-left)
+  MOBILE_JOYSTICK_X: 100,
+  MOBILE_JOYSTICK_Y_OFFSET: -90,      // from canvas bottom
+  MOBILE_JOYSTICK_BASE_RADIUS: 50,
+  MOBILE_JOYSTICK_THUMB_RADIUS: 22,
+  MOBILE_JOYSTICK_BASE_ALPHA: 0.2,
+  MOBILE_JOYSTICK_THUMB_ALPHA: 0.5,
+  MOBILE_JOYSTICK_MAX_DISTANCE: 45,
+
+  // Sprint button (bottom-right)
+  MOBILE_SPRINT_BTN_X_OFFSET: -100,   // from canvas right
+  MOBILE_SPRINT_BTN_Y_OFFSET: -90,
+  MOBILE_SPRINT_BTN_RADIUS: 30,
+  MOBILE_SPRINT_BTN_ALPHA: 0.4,
+  MOBILE_SPRINT_BTN_ACTIVE_ALPHA: 0.7,
+
+  // Off-screen department indicators
+  MOBILE_DEPT_INDICATOR_SIZE: 14,
+  MOBILE_DEPT_INDICATOR_MARGIN: 40,
+  MOBILE_DEPT_INDICATOR_PULSE_MS: 800,
+
   // === TASK TIER SELECTION WEIGHTS ===
   TASK_TIER_WEIGHT_CURRENT: 0.6,
   TASK_TIER_WEIGHT_BELOW: 0.3,
@@ -1260,6 +1287,7 @@ export default {
 - 15 upgrades, tier-gated
 - Task expiry mechanic
 - Desktop keyboard controls
+- Mobile/touch controls (joystick, sprint button, zoomed camera, department indicators)
 - Stress system with visual feedback
 - AI-generated or asset-pack pixel art
 - Sound effects + background music
@@ -1267,7 +1295,6 @@ export default {
 - Win/lose screens with stats and satirical copy
 
 **Out of scope (future):**
-- Mobile/touch controls
 - High score persistence/leaderboard
 - Multiple office maps
 - Boss fight finale

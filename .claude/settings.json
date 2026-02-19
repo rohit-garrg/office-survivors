@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if echo \"$CLAUDE_FILE_PATH\" | grep -qE '\\.js$'; then npx eslint --no-warn-ignored --quiet \"$CLAUDE_FILE_PATH\" 2>/dev/null || true; fi"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if echo \"$CLAUDE_FILE_PATH\" | grep -q 'gameConfig.js'; then echo 'BLOCK: Use Edit, not Write, on gameConfig.js (single source of truth). Full overwrites risk losing tuned balance values.'; exit 2; fi"
+          }
+        ]
+      }
+    ]
+  }
+}

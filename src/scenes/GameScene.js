@@ -958,9 +958,10 @@ export class GameScene extends Phaser.Scene {
 
   /** Create vignette glow overlay: single canvas texture with edge gradients */
   createVignetteGlow() {
-    const w = CONFIG.CANVAS_WIDTH;
-    const h = CONFIG.CANVAS_HEIGHT;
-    const gw = CONFIG.EFFECTS.VIGNETTE_GLOW_WIDTH;
+    const zoom = isTouchDevice() ? CONFIG.MOBILE_CAMERA_ZOOM : 1;
+    const w = Math.ceil(CONFIG.CANVAS_WIDTH / zoom);
+    const h = Math.ceil(CONFIG.CANVAS_HEIGHT / zoom);
+    const gw = Math.ceil(CONFIG.EFFECTS.VIGNETTE_GLOW_WIDTH / zoom);
 
     // Remove stale texture if scene restarts
     if (this.textures.exists('vignette-glow')) {
@@ -1003,7 +1004,8 @@ export class GameScene extends Phaser.Scene {
 
     canvasTex.refresh();
 
-    this.vignetteImage = this.add.image(w / 2, h / 2, 'vignette-glow')
+    // Position at canvas center (zoom fixed-point), not texture center
+    this.vignetteImage = this.add.image(CONFIG.CANVAS_WIDTH / 2, CONFIG.CANVAS_HEIGHT / 2, 'vignette-glow')
       .setScrollFactor(0)
       .setDepth(400)
       .setAlpha(0);
@@ -1273,13 +1275,32 @@ export class GameScene extends Phaser.Scene {
     };
   }
 
+  /** Convert desired screen position to game coords for scrollFactor(0) objects under camera zoom.
+   *  Phaser zooms about the canvas center, so: screenX = (gameX - cx) * zoom + cx.
+   *  Inverse: gameX = cx + (screenX - cx) / zoom. At zoom=1 this is the identity. */
+  screenToFixed(screenX, screenY) {
+    const zoom = this.cameras.main.zoom;
+    const cx = CONFIG.CANVAS_WIDTH / 2;
+    const cy = CONFIG.CANVAS_HEIGHT / 2;
+    return {
+      x: cx + (screenX - cx) / zoom,
+      y: cy + (screenY - cy) / zoom,
+    };
+  }
+
   /** Create virtual joystick for mobile (bottom-left) */
   createMobileJoystick() {
-    const baseX = CONFIG.MOBILE_JOYSTICK_X;
-    const baseY = CONFIG.CANVAS_HEIGHT + CONFIG.MOBILE_JOYSTICK_Y_OFFSET;
-    const baseRadius = CONFIG.MOBILE_JOYSTICK_BASE_RADIUS;
-    const thumbRadius = CONFIG.MOBILE_JOYSTICK_THUMB_RADIUS;
-    const maxDist = CONFIG.MOBILE_JOYSTICK_MAX_DISTANCE;
+    const zoom = CONFIG.MOBILE_CAMERA_ZOOM;
+    // Desired screen position: (100, 450) — bottom-left
+    const pos = this.screenToFixed(
+      CONFIG.MOBILE_JOYSTICK_X,
+      CONFIG.CANVAS_HEIGHT + CONFIG.MOBILE_JOYSTICK_Y_OFFSET
+    );
+    const baseX = pos.x;
+    const baseY = pos.y;
+    const baseRadius = CONFIG.MOBILE_JOYSTICK_BASE_RADIUS / zoom;
+    const thumbRadius = CONFIG.MOBILE_JOYSTICK_THUMB_RADIUS / zoom;
+    const maxDist = CONFIG.MOBILE_JOYSTICK_MAX_DISTANCE / zoom;
     const deadzone = maxDist * 0.15;
 
     // Outer ring (base)
@@ -1291,7 +1312,7 @@ export class GameScene extends Phaser.Scene {
       .setScrollFactor(0).setDepth(451);
 
     // Invisible hit zone (larger for easier finger acquisition)
-    const hitZone = this.add.circle(baseX, baseY, baseRadius + 20, 0x000000, 0)
+    const hitZone = this.add.circle(baseX, baseY, baseRadius + 20 / zoom, 0x000000, 0)
       .setScrollFactor(0).setDepth(452)
       .setInteractive();
 
@@ -1329,11 +1350,17 @@ export class GameScene extends Phaser.Scene {
   /** Update joystick thumb position and direction from pointer */
   _updateJoystickThumb(pointer) {
     const js = this.joystick;
-    const maxDist = CONFIG.MOBILE_JOYSTICK_MAX_DISTANCE;
+    const zoom = CONFIG.MOBILE_CAMERA_ZOOM;
+    const maxDist = CONFIG.MOBILE_JOYSTICK_MAX_DISTANCE / zoom;
     const deadzone = maxDist * 0.15;
 
-    const dx = pointer.x - js.baseX;
-    const dy = pointer.y - js.baseY;
+    // Convert pointer from canvas coords to game coords (same space as joystick base)
+    const cx = CONFIG.CANVAS_WIDTH / 2;
+    const cy = CONFIG.CANVAS_HEIGHT / 2;
+    const px = cx + (pointer.x - cx) / zoom;
+    const py = cy + (pointer.y - cy) / zoom;
+    const dx = px - js.baseX;
+    const dy = py - js.baseY;
     const dist = Math.sqrt(dx * dx + dy * dy);
 
     if (dist < deadzone) {
@@ -1358,24 +1385,30 @@ export class GameScene extends Phaser.Scene {
 
   /** Create sprint button for mobile (bottom-right) */
   createMobileSprintButton() {
-    const btnX = CONFIG.CANVAS_WIDTH + CONFIG.MOBILE_SPRINT_BTN_X_OFFSET;
-    const btnY = CONFIG.CANVAS_HEIGHT + CONFIG.MOBILE_SPRINT_BTN_Y_OFFSET;
-    const radius = CONFIG.MOBILE_SPRINT_BTN_RADIUS;
+    const zoom = CONFIG.MOBILE_CAMERA_ZOOM;
+    // Desired screen position: (860, 450) — bottom-right
+    const pos = this.screenToFixed(
+      CONFIG.CANVAS_WIDTH + CONFIG.MOBILE_SPRINT_BTN_X_OFFSET,
+      CONFIG.CANVAS_HEIGHT + CONFIG.MOBILE_SPRINT_BTN_Y_OFFSET
+    );
+    const btnX = pos.x;
+    const btnY = pos.y;
+    const radius = CONFIG.MOBILE_SPRINT_BTN_RADIUS / zoom;
 
     // Gold circle
     const circle = this.add.circle(btnX, btnY, radius, 0xFFD700, CONFIG.MOBILE_SPRINT_BTN_ALPHA)
       .setScrollFactor(0).setDepth(450);
 
-    // "RUN" label
+    // "RUN" label (scale font for zoom)
     const label = this.add.text(btnX, btnY, 'RUN', {
-      fontSize: '13px',
+      fontSize: `${Math.round(13 / zoom)}px`,
       fontFamily: 'monospace',
       fontStyle: 'bold',
       color: '#000000',
     }).setOrigin(0.5).setScrollFactor(0).setDepth(451);
 
     // Invisible hit zone (larger)
-    const hitZone = this.add.circle(btnX, btnY, radius + 15, 0x000000, 0)
+    const hitZone = this.add.circle(btnX, btnY, radius + 15 / zoom, 0x000000, 0)
       .setScrollFactor(0).setDepth(452)
       .setInteractive();
 
@@ -1402,12 +1435,15 @@ export class GameScene extends Phaser.Scene {
 
   /** Create a visible pause button for mobile (top-right corner) */
   createMobilePauseButton() {
-    const hitSize = CONFIG.MOBILE_PAUSE_HIT_SIZE;
-    const x = CONFIG.CANVAS_WIDTH - 50;
-    const y = 30;
+    const zoom = CONFIG.MOBILE_CAMERA_ZOOM;
+    const hitSize = CONFIG.MOBILE_PAUSE_HIT_SIZE / zoom;
+    // Desired screen position: (910, 30) — top-right
+    const pos = this.screenToFixed(CONFIG.CANVAS_WIDTH - 50, 30);
+    const x = pos.x;
+    const y = pos.y;
 
     // Semi-transparent dark circle for contrast
-    const bgCircle = this.add.circle(x, y, 20, 0x000000, 0.5)
+    const bgCircle = this.add.circle(x, y, 20 / zoom, 0x000000, 0.5)
       .setScrollFactor(0).setDepth(500);
 
     // Invisible hit area (larger touch target)
@@ -1418,8 +1454,8 @@ export class GameScene extends Phaser.Scene {
     // Visible pause icon (two bars)
     const gfx = this.add.graphics().setScrollFactor(0).setDepth(501);
     gfx.fillStyle(0xffffff, 0.9);
-    gfx.fillRect(x - 8, y - 10, 6, 20);
-    gfx.fillRect(x + 2, y - 10, 6, 20);
+    gfx.fillRect(x - 8 / zoom, y - 10 / zoom, 6 / zoom, 20 / zoom);
+    gfx.fillRect(x + 2 / zoom, y - 10 / zoom, 6 / zoom, 20 / zoom);
 
     hitArea.on('pointerdown', () => this.togglePause());
 
@@ -1428,21 +1464,25 @@ export class GameScene extends Phaser.Scene {
 
   /** Create a mute/unmute toggle button for mobile (left of pause button) */
   createMobileMuteButton() {
-    const x = CONFIG.CANVAS_WIDTH - 100;
-    const y = 30;
+    const zoom = CONFIG.MOBILE_CAMERA_ZOOM;
+    // Desired screen position: (860, 30) — top-right, left of pause
+    const pos = this.screenToFixed(CONFIG.CANVAS_WIDTH - 100, 30);
+    const x = pos.x;
+    const y = pos.y;
+    const hitSize = CONFIG.MOBILE_PAUSE_HIT_SIZE / zoom;
 
     // Semi-transparent dark circle background
-    const bgCircle = this.add.circle(x, y, 20, 0x000000, 0.5)
+    const bgCircle = this.add.circle(x, y, 20 / zoom, 0x000000, 0.5)
       .setScrollFactor(0).setDepth(500);
 
     // Hit area
-    const hitArea = this.add.rectangle(x, y, CONFIG.MOBILE_PAUSE_HIT_SIZE, CONFIG.MOBILE_PAUSE_HIT_SIZE, 0x000000, 0)
+    const hitArea = this.add.rectangle(x, y, hitSize, hitSize, 0x000000, 0)
       .setScrollFactor(0).setDepth(502)
       .setInteractive({ useHandCursor: true });
 
     // Text icon: musical note for unmuted, X for muted
     const icon = this.add.text(x, y, this.soundManager.muted ? 'x' : '♪', {
-      fontSize: '20px', fontFamily: 'monospace', color: '#ffffff',
+      fontSize: `${Math.round(20 / zoom)}px`, fontFamily: 'monospace', color: '#ffffff',
     }).setOrigin(0.5).setScrollFactor(0).setDepth(501);
 
     hitArea.on('pointerdown', () => {
@@ -1457,6 +1497,7 @@ export class GameScene extends Phaser.Scene {
   /** Create off-screen department direction indicators for mobile */
   createDepartmentIndicators() {
     const ts = CONFIG.TILE_SIZE;
+    const zoom = CONFIG.MOBILE_CAMERA_ZOOM;
     this.deptIndicators = [];
 
     for (const dept of DEPARTMENTS) {
@@ -1468,20 +1509,20 @@ export class GameScene extends Phaser.Scene {
 
       // Triangle pointing right (will be rotated toward department)
       const gfx = this.add.graphics().setScrollFactor(0).setDepth(300);
-      const sz = CONFIG.MOBILE_DEPT_INDICATOR_SIZE;
+      const sz = CONFIG.MOBILE_DEPT_INDICATOR_SIZE / zoom;
       gfx.fillStyle(color, 1);
       gfx.fillTriangle(sz, 0, -sz * 0.6, -sz * 0.7, -sz * 0.6, sz * 0.7);
-      gfx.lineStyle(1.5, 0xffffff, 0.8);
+      gfx.lineStyle(1.5 / zoom, 0xffffff, 0.8);
       gfx.strokeTriangle(sz, 0, -sz * 0.6, -sz * 0.7, -sz * 0.6, sz * 0.7);
 
       // Abbreviation label
       const label = this.add.text(0, 0, abbrev, {
-        fontSize: '10px',
+        fontSize: `${Math.round(10 / zoom)}px`,
         fontFamily: 'monospace',
         fontStyle: 'bold',
         color: '#ffffff',
         stroke: '#000000',
-        strokeThickness: 2,
+        strokeThickness: 2 / zoom,
       }).setOrigin(0.5).setScrollFactor(0).setDepth(301);
 
       // Container holds both
@@ -1503,9 +1544,13 @@ export class GameScene extends Phaser.Scene {
   updateDepartmentIndicators() {
     const cam = this.cameras.main;
     const view = cam.worldView;
-    const margin = CONFIG.MOBILE_DEPT_INDICATOR_MARGIN;
-    const screenW = CONFIG.CANVAS_WIDTH;
-    const screenH = CONFIG.CANVAS_HEIGHT;
+    const zoom = CONFIG.MOBILE_CAMERA_ZOOM;
+    const margin = CONFIG.MOBILE_DEPT_INDICATOR_MARGIN / zoom;
+    // Game-coord center and half-extents for scrollFactor(0) positioning
+    const centerX = CONFIG.CANVAS_WIDTH / 2;
+    const centerY = CONFIG.CANVAS_HEIGHT / 2;
+    const halfW = CONFIG.CANVAS_WIDTH / (2 * zoom) - margin;
+    const halfH = CONFIG.CANVAS_HEIGHT / (2 * zoom) - margin;
 
     // Determine which departments the player's carried tasks need
     const neededDepts = new Set();
@@ -1539,23 +1584,19 @@ export class GameScene extends Phaser.Scene {
       // Counter-rotate label so text stays upright
       ind.label.setRotation(-angle);
 
-      // Project from screen center along angle to screen edge
-      const halfW = screenW / 2 - margin;
-      const halfH = screenH / 2 - margin;
-
-      // Ray-rect intersection: find t where ray hits edge
+      // Ray-rect intersection: find t where ray hits edge of visible area
       const cos = Math.cos(angle);
       const sin = Math.sin(angle);
       let t = Infinity;
       if (cos !== 0) t = Math.min(t, Math.abs(halfW / cos));
       if (sin !== 0) t = Math.min(t, Math.abs(halfH / sin));
 
-      const sx = screenW / 2 + cos * t;
-      const sy = screenH / 2 + sin * t;
+      const sx = centerX + cos * t;
+      const sy = centerY + sin * t;
 
-      // Clamp within screen bounds with margin
-      const cx = Phaser.Math.Clamp(sx, margin, screenW - margin);
-      const cy = Phaser.Math.Clamp(sy, margin, screenH - margin);
+      // Clamp within visible bounds
+      const cx = Phaser.Math.Clamp(sx, centerX - halfW, centerX + halfW);
+      const cy = Phaser.Math.Clamp(sy, centerY - halfH, centerY + halfH);
       ind.container.setPosition(cx, cy);
 
       // Pulse if department matches a carried task destination
@@ -1624,6 +1665,9 @@ export class GameScene extends Phaser.Scene {
   showPauseOverlay() {
     if (this.pauseOverlay) return;
 
+    const isTouch = isTouchDevice();
+    const zoom = isTouch ? CONFIG.MOBILE_CAMERA_ZOOM : 1;
+    // Canvas center is always the fixed-point of the zoom transform
     const cx = CONFIG.CANVAS_WIDTH / 2;
     const cy = CONFIG.CANVAS_HEIGHT / 2;
 
@@ -1637,58 +1681,59 @@ export class GameScene extends Phaser.Scene {
     };
 
     // Dim background
-    addPauseElement(this.add.rectangle(cx, cy, CONFIG.CANVAS_WIDTH, CONFIG.CANVAS_HEIGHT, 0x000000, 0.6));
+    addPauseElement(this.add.rectangle(cx, cy, CONFIG.CANVAS_WIDTH / zoom, CONFIG.CANVAS_HEIGHT / zoom, 0x000000, 0.6));
+
+    // Scale spacing and sizes for zoom
+    const s = (v) => v / zoom;
 
     // PAUSED text
-    addPauseElement(this.add.text(cx, cy - 60, 'PAUSED', {
-      fontSize: '40px',
+    addPauseElement(this.add.text(cx, cy - s(60), 'PAUSED', {
+      fontSize: `${Math.round(s(40))}px`,
       fontFamily: 'monospace',
       color: '#ffffff',
       fontStyle: 'bold',
     }).setOrigin(0.5));
 
-    const isTouch = isTouchDevice();
-
     // Resume button
     const resumeBg = addPauseElement(
-      this.add.rectangle(cx, cy, 160, 36, 0x4169E1)
+      this.add.rectangle(cx, cy, s(160), s(36), 0x4169E1)
         .setInteractive({ useHandCursor: true })
     );
     const resumeText = addPauseElement(this.add.text(cx, cy, isTouch ? 'Resume' : 'Resume (P)', {
-      fontSize: '16px', fontFamily: 'monospace', color: '#ffffff',
+      fontSize: `${Math.round(s(16))}px`, fontFamily: 'monospace', color: '#ffffff',
     }).setOrigin(0.5).setInteractive({ useHandCursor: true }));
     resumeBg.on('pointerdown', () => this.togglePause());
     resumeText.on('pointerdown', () => this.togglePause());
 
     // How to Play button
     const htpBg = addPauseElement(
-      this.add.rectangle(cx, cy + 50, 160, 36, 0x555555)
+      this.add.rectangle(cx, cy + s(50), s(160), s(36), 0x555555)
         .setInteractive({ useHandCursor: true })
     );
-    const htpText = addPauseElement(this.add.text(cx, cy + 50, isTouch ? 'How to Play' : 'How to Play (H)', {
-      fontSize: '16px', fontFamily: 'monospace', color: '#ffffff',
+    const htpText = addPauseElement(this.add.text(cx, cy + s(50), isTouch ? 'How to Play' : 'How to Play (H)', {
+      fontSize: `${Math.round(s(16))}px`, fontFamily: 'monospace', color: '#ffffff',
     }).setOrigin(0.5).setInteractive({ useHandCursor: true }));
     htpBg.on('pointerdown', () => this.showHowToPlay());
     htpText.on('pointerdown', () => this.showHowToPlay());
 
     // Restart button
     const restartBg = addPauseElement(
-      this.add.rectangle(cx, cy + 100, 160, 36, 0x555555)
+      this.add.rectangle(cx, cy + s(100), s(160), s(36), 0x555555)
         .setInteractive({ useHandCursor: true })
     );
-    const restartText = addPauseElement(this.add.text(cx, cy + 100, isTouch ? 'Restart' : 'Restart (R)', {
-      fontSize: '16px', fontFamily: 'monospace', color: '#ffffff',
+    const restartText = addPauseElement(this.add.text(cx, cy + s(100), isTouch ? 'Restart' : 'Restart (R)', {
+      fontSize: `${Math.round(s(16))}px`, fontFamily: 'monospace', color: '#ffffff',
     }).setOrigin(0.5).setInteractive({ useHandCursor: true }));
     restartBg.on('pointerdown', () => this.pauseRestart());
     restartText.on('pointerdown', () => this.pauseRestart());
 
     // Quit button
     const quitBg = addPauseElement(
-      this.add.rectangle(cx, cy + 150, 160, 36, 0x555555)
+      this.add.rectangle(cx, cy + s(150), s(160), s(36), 0x555555)
         .setInteractive({ useHandCursor: true })
     );
-    const quitText = addPauseElement(this.add.text(cx, cy + 150, isTouch ? 'Quit to Menu' : 'Quit to Menu (Q)', {
-      fontSize: '16px', fontFamily: 'monospace', color: '#ffffff',
+    const quitText = addPauseElement(this.add.text(cx, cy + s(150), isTouch ? 'Quit to Menu' : 'Quit to Menu (Q)', {
+      fontSize: `${Math.round(s(16))}px`, fontFamily: 'monospace', color: '#ffffff',
     }).setOrigin(0.5).setInteractive({ useHandCursor: true }));
     quitBg.on('pointerdown', () => this.pauseQuit());
     quitText.on('pointerdown', () => this.pauseQuit());
@@ -1697,10 +1742,10 @@ export class GameScene extends Phaser.Scene {
     if (isTouch) {
       const soundLabel = this.soundManager.muted ? 'Sound: OFF' : 'Sound: ON';
       addPauseElement(
-        this.add.rectangle(cx, cy + 200, 160, 36, 0x2E8B57)
+        this.add.rectangle(cx, cy + s(200), s(160), s(36), 0x2E8B57)
       );
-      const soundText = addPauseElement(this.add.text(cx, cy + 200, soundLabel, {
-        fontSize: '14px', fontFamily: 'monospace', color: '#ffffff',
+      const soundText = addPauseElement(this.add.text(cx, cy + s(200), soundLabel, {
+        fontSize: `${Math.round(s(14))}px`, fontFamily: 'monospace', color: '#ffffff',
       }).setOrigin(0.5).setInteractive({ useHandCursor: true }));
       const toggleSound = () => {
         this.soundManager.resume();
@@ -1712,8 +1757,8 @@ export class GameScene extends Phaser.Scene {
       };
       soundText.on('pointerdown', toggleSound);
     } else {
-      addPauseElement(this.add.text(cx, cy + 200, 'M to toggle sound', {
-        fontSize: '11px', fontFamily: 'monospace', color: '#888888',
+      addPauseElement(this.add.text(cx, cy + s(200), 'M to toggle sound', {
+        fontSize: `${Math.round(s(11))}px`, fontFamily: 'monospace', color: '#888888',
       }).setOrigin(0.5));
     }
 
@@ -1826,11 +1871,12 @@ export class GameScene extends Phaser.Scene {
       this.cameras.main.shake(fx.SHAKE_DURATION * 1.5, fx.SHAKE_INTENSITY * 2);
       this.soundManager.playGameOver();
 
-      // "STRESS OVERLOAD" text centered on screen
+      // "STRESS OVERLOAD" text centered on screen (canvas center is zoom fixed-point)
+      const olZoom = isTouchDevice() ? CONFIG.MOBILE_CAMERA_ZOOM : 1;
       const overloadText = this.add.text(
         CONFIG.CANVAS_WIDTH / 2, CONFIG.CANVAS_HEIGHT / 2,
         'STRESS OVERLOAD', {
-          fontSize: '36px',
+          fontSize: `${Math.round(36 / olZoom)}px`,
           fontFamily: 'monospace',
           color: '#ff2222',
           fontStyle: 'bold',
